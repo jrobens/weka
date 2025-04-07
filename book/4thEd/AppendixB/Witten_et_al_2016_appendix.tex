@@ -1,0 +1,92 @@
+\documentclass[a4paper]{book}
+
+\usepackage{epsfig}
+\usepackage{wrapfig}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{subfig}
+\usepackage{fancyvrb}
+\usepackage{mdframed}
+\usepackage[percent]{overpic}
+\usepackage[dvipsnames]{xcolor}
+\definecolor{orange}{RGB}{246,200,30}
+\usepackage{transparent}
+\usepackage{lmodern}
+\usepackage{morefloats}
+
+\usepackage{geometry}
+
+\input{hyphenation}
+\input{extensions}
+
+\newsavebox{\verbbox}
+
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+\setlength{\fboxsep}{0pt}
+\setlength{\fboxrule}{2pt}
+
+\begin{document}
+
+\newgeometry{left=0cm,right=1cm,top=2cm,bottom=0cm}
+
+\begin{titlepage}
+
+\begin{overpic}[width=1\textwidth]{images/Book4thEd.jpg}
+ \put (2,70) { \transparent{0.7} \fbox{\colorbox{orange}{
+{\fontfamily{ugq}\selectfont
+\transparent{1}\begin{minipage}{0.9\textwidth}
+\begin{center}
+ \vspace{1cm}
+ \fontsize{40}{48}\selectfont The\\
+ \fontsize{140}{120}\selectfont WEKA\\
+ \fontsize{40}{48}\selectfont Workbench\\
+\fontsize{20}{24}\selectfont ~\\
+{Eibe Frank, Mark A. Hall, and Ian H. Witten}\\
+\fontsize{15}{18}\selectfont~\\
+ Online Appendix for\\ 
+ ``Data Mining: Practical Machine Learning Tools and Techniques"\\
+ Morgan Kaufmann, Fourth Edition, 2016
+ \vspace{1cm}
+ \end{center}
+\end{minipage}}
+}}}
+\end{overpic}
+
+\end{titlepage}
+
+\restoregeometry
+
+\tableofcontents
+
+\chapter{Introduction to Weka}
+\input{introduction}
+
+\chapter{The Explorer}
+\label{chapt:explorer}
+\input{explorer}
+
+\chapter{The Knowledge Flow Interface}
+\label{chapt:knowledge_flow}
+\input{knowledgeflow}
+
+\chapter{The Experimenter}
+\label{chapt:experimenter}
+\input{experimenter}
+
+\chapter{The Command-Line Interface}
+\label{chapt:command_line}
+\input{command_line}
+
+\chapter{Embedded Machine Learning}
+\label{chapt:embedded}
+\input{embedded}
+
+\chapter{Writing New Learning Schemes}
+\label{chapt:writing_learning_schemes}
+\input{schemes}
+
+\end{document}
+
+
