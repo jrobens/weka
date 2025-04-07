@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.github.fommil.netlib</groupId>
+        <artifactId>native_system-xbuilds</artifactId>
+        <version>1.2-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>netlib-native_system-linux-aarch64</artifactId>
+    <packaging>so</packaging>
+
+    <!--
+    This is built using a cross-compiler.
+
+     sudo apt install gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gfortran-aarch64-linux-gnu
+
+    Get the aarch64 Open JDK (e.g., Zulu) and install into
+
+      /opt/linux-aarch64/jdk8
+        
+    and execute download_aarch64_libraries.sh.
+
+    -->
+    <properties>
+        <netlib.src>../../../netlib</netlib.src>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.parent.groupId}</groupId>
+            <artifactId>native_system-java</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.github.fommil.netlib</groupId>
+                <artifactId>generator</artifactId>
+                <executions>
+                    <execution>
+                        <id>blas</id>
+                    </execution>
+                    <execution>
+                        <id>lapack</id>
+                    </execution>
+                    <execution>
+                        <id>arpack</id>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <javahOS>linux</javahOS>
+		    <jdkIncludePath>/opt/linux-aarch64/jdk8/include</jdkIncludePath>
+                    <compilerExecutable>aarch64-linux-gnu-gcc</compilerExecutable>
+                    <linkerExecutable>aarch64-linux-gnu-gcc</linkerExecutable>
+                    <compilerStartOptions>
+                        <compilerStartOption>-Os</compilerStartOption>
+                        <compilerStartOption>-I/opt/linux-aarch64/usr/include/aarch64-linux-gnu</compilerStartOption>
+                    </compilerStartOptions>
+
+                    <linkerMiddleOptions>
+                        <linkerMiddleOption>-L/opt/linux-aarch64/usr/lib/aarch64-linux-gnu/blas</linkerMiddleOption>
+                        <linkerMiddleOption>-L/opt/linux-aarch64/usr/lib/aarch64-linux-gnu/lapack</linkerMiddleOption>
+    <linkerMiddleOption>-shared</linkerMiddleOption>
+                        <linkerMiddleOption>-lgfortran</linkerMiddleOption>
+                        <linkerMiddleOption>-lblas</linkerMiddleOption>
+                        <linkerMiddleOption>-llapack</linkerMiddleOption>
+                        <linkerMiddleOption>-Wl,-s</linkerMiddleOption>
+                        <linkerMiddleOption>-Wl,--version-script=${netlib.src}/symbol.map</linkerMiddleOption>
+                        <linkerMiddleOption>-Wl,--gc-sections</linkerMiddleOption>
+                    </linkerMiddleOptions>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>runtime</id>
+                    </execution>
+                    <execution>
+                        <id>source</id>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

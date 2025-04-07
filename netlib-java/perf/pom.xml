@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+
+    mvn compile assembly:single
+    # F2J
+    java -Djava.util.logging.config.file=logging.properties -Dcom.github.fommil.netlib.BLAS=com.github.fommil.netlib.F2jBLAS -Dcom.github.fommil.netlib.LAPACK=com.github.fommil.netlib.F2jLAPACK -Dcom.github.fommil.netlib.ARPACK=com.github.fommil.netlib.F2jARPACK -jar target/perf-*-jar-with-dependencies.jar
+    # native_ref
+    java -Djava.util.logging.config.file=logging.properties -Dcom.github.fommil.netlib.BLAS=com.github.fommil.netlib.NativeRefBLAS -Dcom.github.fommil.netlib.LAPACK=com.github.fommil.netlib.NativeRefLAPACK -Dcom.github.fommil.netlib.ARPACK=com.github.fommil.netlib.NativeRefARPACK -jar target/perf-*-jar-with-dependencies.jar
+    # native_system
+    java -Djava.util.logging.config.file=logging.properties -jar target/perf-*-jar-with-dependencies.jar
+
+    and potentially (e.g. on raspberrypi)
+
+/usr/bin/java -Dperf.max=75 -Djvm.type=jdk7 -Djava.util.logging.config.file=logging.properties -jar target/perf-1.1-jar-with-dependencies.jar
+/usr/bin/java -jamvm -Dperf.max=75 -Djvm.type=jamvm -Djava.util.logging.config.file=logging.properties -jar target/perf-1.1-jar-with-dependencies.jar
+/usr/bin/java -avian -Dperf.max=75 -Djvm.type=avian -Djava.util.logging.config.file=logging.properties -jar target/perf-1.1-jar-with-dependencies.jar
+/opt/jdk8/bin/java -Dperf.max=75 -Djvm.type=jdk8 -Djava.util.logging.config.file=logging.properties -jar target/perf-1.1-jar-with-dependencies.jar
+/opt/jdk8/bin/java -Dperf.max=75 -Djava.util.logging.config.file=logging.properties -Dcom.github.fommil.netlib.BLAS=com.github.fommil.netlib.NativeRefBLAS -Dcom.github.fommil.netlib.LAPACK=com.github.fommil.netlib.NativeRefLAPACK -Dcom.github.fommil.netlib.ARPACK=com.github.fommil.netlib.NativeRefARPACK -jar target/perf-1.1-jar-with-dependencies.jar
+/opt/jdk8/bin/java -Dperf.max=75 -Djava.util.logging.config.file=logging.properties -Dcom.github.fommil.netlib.BLAS=com.github.fommil.netlib.NativeSystemBLAS -Dcom.github.fommil.netlib.LAPACK=com.github.fommil.netlib.NativeSystemLAPACK -Dcom.github.fommil.netlib.ARPACK=com.github.fommil.netlib.NativeSystemARPACK -jar target/perf-1.1-jar-with-dependencies.jar
+    -->
+
+    <parent>
+        <groupId>com.github.fommil.netlib</groupId>
+        <artifactId>parent</artifactId>
+        <version>1.2-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>perf</artifactId>
+    <packaging>jar</packaging>
+
+    <properties>
+        <exec.mainClass>com.github.fommil.netlib.Benchmarks</exec.mainClass>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>net.sf.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.fommil</groupId>
+            <artifactId>java-logging</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.parent.groupId}</groupId>
+            <version>${project.parent.version}</version>
+            <artifactId>all</artifactId>
+            <type>pom</type>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>${exec.mainClass}</mainClass>
+                        </manifest>
+                    </archive>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

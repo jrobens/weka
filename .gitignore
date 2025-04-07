@@ -1,0 +1,7 @@
+build/
+dist/
+*~
+.idea/
+*.iml
+*.class
+./trunk/packages/external/tigerjython/lib/tigerjython2.jar

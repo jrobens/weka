@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+    This is an artificial package that facilitates easy cross
+    compiles for various targets from Linux (because OS X
+    cross building doesn't work so well).
+    -->
+
+    <parent>
+        <groupId>com.github.fommil.netlib</groupId>
+        <artifactId>native_ref</artifactId>
+        <version>1.2-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>native_ref-xbuilds</artifactId>
+    <packaging>pom</packaging>
+
+    <profiles>
+      <profile>
+	<id>aarch64-profile</id>
+	<activation>
+	  <os><arch>aarch64</arch></os>
+	</activation>
+	<modules>
+          <module>linux-aarch64</module>
+	</modules>
+      </profile>
+      <profile>
+	<id>ppc64le-profile</id>
+	<activation>
+	  <os><arch>ppc64le</arch></os>
+	</activation>
+	<modules>
+          <module>linux-ppc64le</module>
+	</modules>
+      </profile>
+      <profile>
+	<id>default-profile</id>
+	<activation>
+	  <activeByDefault>true</activeByDefault>
+	</activation>
+	<modules>
+          <module>linux-x86_64</module>
+          <module>linux-i686</module>
+          <module>linux-aarch64</module>
+	</modules>
+      </profile>
+    </profiles>
+
+</project>
