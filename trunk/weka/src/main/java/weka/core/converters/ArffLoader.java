@@ -48,7 +48,9 @@ import weka.core.Utils;
  * file format) format.
  * <p/>
  * <!-- globalinfo-end -->
- * 
+ *
+ * Change to java.util.Scanner?
+ *
  * @author Mark Hall (mhall@cs.waikato.ac.nz)
  * @author FracPete (fracpete at waikato dot ac dot nz)
  * @version $Revision$
@@ -82,9 +84,9 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
   /**
    * Reads data from an ARFF file, either in incremental or batch mode.
    * <p/>
-   * 
+   *
    * Typical code for batch usage:
-   * 
+   *
    * <pre>
    * BufferedReader reader =
    *   new BufferedReader(new FileReader(&quot;/some/where/file.arff&quot;));
@@ -92,9 +94,9 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
    * Instances data = arff.getData();
    * data.setClassIndex(data.numAttributes() - 1);
    * </pre>
-   * 
+   *
    * Typical code for incremental usage:
-   * 
+   *
    * <pre>
    * BufferedReader reader =
    *   new BufferedReader(new FileReader(&quot;/some/where/file.arff&quot;));
@@ -106,7 +108,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
    *   data.add(inst);
    * }
    * </pre>
-   * 
+   *
    * @author Eibe Frank (eibe@cs.waikato.ac.nz)
    * @author Len Trigg (trigg@cs.waikato.ac.nz)
    * @author fracpete (fracpete at waikato dot ac dot nz)
@@ -148,7 +150,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
     /**
      * Reads the data completely from the reader. The data can be accessed via
      * the <code>getData()</code> method.
-     * 
+     *
      * @param reader the reader to use
      * @throws IOException if something goes wrong
      * @see #getData()
@@ -177,7 +179,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
     /**
      * Reads only the header and reserves the specified space for instances.
      * Further instances can be read via <code>readInstance()</code>.
-     * 
+     *
      * @param reader the reader to use
      * @param capacity the capacity of the new dataset
      * @param batch true if reading in batch mode
@@ -208,7 +210,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
     /**
      * Reads the data without header according to the specified template. The
      * data can be accessed via the <code>getData()</code> method.
-     * 
+     *
      * @param reader the reader to use
      * @param template the template header
      * @param lines the lines read so far
@@ -236,7 +238,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
      * Initializes the reader without reading the header according to the
      * specified template. The data must be read via the
      * <code>readInstance()</code> method.
-     * 
+     *
      * @param reader the reader to use
      * @param template the template header
      * @param lines the lines read so far
@@ -258,7 +260,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
      * Initializes the reader without reading the header according to the
      * specified template. The data must be read via the
      * <code>readInstance()</code> method.
-     * 
+     *
      * @param reader the reader to use
      * @param template the template header
      * @param lines the lines read so far
@@ -312,7 +314,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * initializes the buffers for sparse instances to be read
-     * 
+     *
      * @see #m_ValueBuffer
      * @see #m_IndicesBuffer
      */
@@ -341,7 +343,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Throws error message with line number and last token read.
-     * 
+     *
      * @param msg the error message to be thrown
      * @throws IOException containing the error message
      */
@@ -356,7 +358,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * returns the current line number
-     * 
+     *
      * @return the current line number
      */
     public int getLineNo() {
@@ -365,13 +367,12 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Gets next token, skipping empty lines.
-     * 
+     *
      * @throws IOException if reading the next token fails
      */
     protected void getFirstToken() throws IOException {
       while (m_Tokenizer.nextToken() == StreamTokenizer.TT_EOL) {
       }
-      ;
 
       if ((m_Tokenizer.ttype == '\'') || (m_Tokenizer.ttype == '"')) {
         m_Tokenizer.ttype = StreamTokenizer.TT_WORD;
@@ -383,7 +384,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Gets index, checking for a premature and of line.
-     * 
+     *
      * @throws IOException if it finds a premature end of line
      */
     protected void getIndex() throws IOException {
@@ -397,7 +398,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Gets token and checks if its end of line.
-     * 
+     *
      * @param endOfFileOk whether EOF is OK
      * @throws IOException if it doesn't find an end of line
      */
@@ -410,7 +411,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Gets the value of an instance's weight (if one exists)
-     * 
+     *
      * @return the value of the instance's weight, or NaN if no weight has been
      *         supplied in the file
      */
@@ -444,7 +445,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Gets next token, checking for a premature and of line.
-     * 
+     *
      * @throws IOException if it finds a premature end of line
      */
     protected void getNextToken() throws IOException {
@@ -490,7 +491,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Reads a single instance using the tokenizer and returns it.
-     * 
+     *
      * @param structure the dataset header information, will get updated in case
      *          of string or relational attributes
      * @return null if end of file has been reached
@@ -502,7 +503,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Reads a single instance using the tokenizer and returns it.
-     * 
+     *
      * @param structure the dataset header information, will get updated in case
      *          of string or relational attributes
      * @param flag if method should test for carriage return after each instance
@@ -516,7 +517,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Reads a single instance using the tokenizer and returns it.
-     * 
+     *
      * @param structure the dataset header information, will get updated in case
      *          of string or relational attributes
      * @param flag if method should test for carriage return after each instance
@@ -548,7 +549,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Reads a single instance using the tokenizer and returns it.
-     * 
+     *
      * @param flag if method should test for carriage return after each instance
      * @return null if end of file has been reached
      * @throws IOException if the information is not read successfully
@@ -686,7 +687,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Reads a single instance using the tokenizer and returns it.
-     * 
+     *
      * @param flag if method should test for carriage return after each instance
      * @return null if end of file has been reached
      * @throws IOException if the information is not read successfully
@@ -781,7 +782,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Reads and stores header of an ARFF file.
-     * 
+     *
      * @param capacity the number of instances to reserve in the data structure
      * @throws IOException if the information is not read successfully
      */
@@ -830,7 +831,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Parses the attribute declaration.
-     * 
+     *
      * @param attributes the current attributes vector
      * @return the new attributes vector
      * @throws IOException if the information is not read successfully
@@ -839,10 +840,16 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
       ArrayList<Attribute> attributes) throws IOException {
       String attributeName;
       ArrayList<String> attributeValues;
+      // Consider allowing single quotes in double-quoted strings
 
       // Get attribute name.
       getNextToken();
       attributeName = m_Tokenizer.sval;
+
+      m_Tokenizer.ordinaryChar('%');
+      // Needs to adapt according to whether enclosed by double or single quotes.
+      // m_Tokenizer.ordinaryChar('\'');
+      // m_Tokenizer.ordinaryChar('\"');
       getNextToken();
 
       // Check if attribute is nominal.
@@ -941,9 +948,15 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
         if (m_Tokenizer.nextToken() != '{') {
           errorMessage("{ expected at beginning of enumeration");
         }
+        // Nulls confuse things.
+        // us dollars) will be allocated within ifc's treasury (ifc's)
         while (m_Tokenizer.nextToken() != '}') {
+          if (m_Tokenizer.sval == null) {
+            continue;
+          }
           if (m_Tokenizer.ttype == StreamTokenizer.TT_EOL) {
-            errorMessage("} expected at end of enumeration");
+        //    List<String> debugData = attributeValues.subList(Math.max(attributeValues.size() - 10, 0), attributeValues.size());
+            errorMessage("} expected at end of enumeration. ");
           } else {
             attributeValues.add(m_Tokenizer.sval);
           }
@@ -958,13 +971,13 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
       if (m_Tokenizer.ttype == StreamTokenizer.TT_EOF) {
         errorMessage("premature end of file");
       }
-
+      m_Tokenizer.commentChar('%');
       return attributes;
     }
 
     /**
      * Reads and skips all tokens before next end of line token.
-     * 
+     *
      * @throws IOException in case something goes wrong
      */
     protected void readTillEOL() throws IOException {
@@ -1006,7 +1019,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Returns the header format
-     * 
+     *
      * @return the header format
      */
     public Instances getStructure() {
@@ -1015,7 +1028,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Returns the data that was read
-     * 
+     *
      * @return the data
      */
     public Instances getData() {
@@ -1025,7 +1038,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
     /**
      * Set whether to retain the values of string attributes in memory (in the
      * header) when reading incrementally.
-     * 
+     *
      * @param retain true if string values are to be retained in memory when
      *          reading incrementally
      */
@@ -1036,7 +1049,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
     /**
      * Get whether to retain the values of string attributes in memory (in the
      * header) when reading incrementally.
-     * 
+     *
      * @return true if string values are to be retained in memory when reading
      *         incrementally
      */
@@ -1046,7 +1059,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
     /**
      * Returns the revision string.
-     * 
+     *
      * @return the revision
      */
     @Override
@@ -1057,7 +1070,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Returns a string describing this Loader
-   * 
+   *
    * @return a description of the Loader suitable for displaying in the
    *         explorer/experimenter gui
    */
@@ -1068,7 +1081,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Tool tip text for this property
-   * 
+   *
    * @return the tool tip for this property
    */
   public String retainStringValsTipText() {
@@ -1081,7 +1094,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
   /**
    * Set whether to retain the values of string attributes in memory (in the
    * header) when reading incrementally.
-   * 
+   *
    * @param retain true if string values are to be retained in memory when
    *          reading incrementally
    */
@@ -1092,7 +1105,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
   /**
    * Get whether to retain the values of string attributes in memory (in the
    * header) when reading incrementally.
-   * 
+   *
    * @return true if string values are to be retained in memory when reading
    *         incrementally
    */
@@ -1102,7 +1115,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Get the file extension used for arff files
-   * 
+   *
    * @return the file extension
    */
   @Override
@@ -1112,7 +1125,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Gets all the file extensions used for this type of file
-   * 
+   *
    * @return the file extensions
    */
   @Override
@@ -1122,7 +1135,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Returns a description of the file type.
-   * 
+   *
    * @return a short file description
    */
   @Override
@@ -1132,7 +1145,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Resets the Loader ready to read a new data set or the same data set again.
-   * 
+   *
    * @throws IOException if something goes wrong
    */
   @Override
@@ -1151,7 +1164,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
   /**
    * Resets the Loader object and sets the source of the data set to be the
    * supplied url.
-   * 
+   *
    * @param url the source url.
    * @throws IOException if an error occurs
    */
@@ -1169,7 +1182,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * get the File specified as the source
-   * 
+   *
    * @return the source file
    */
   @Override
@@ -1179,7 +1192,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * sets the source File
-   * 
+   *
    * @param file the source file
    * @throws IOException if an error occurs
    */
@@ -1191,7 +1204,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Set the url to load from
-   * 
+   *
    * @param url the url to load from
    * @throws IOException if the url can't be set.
    */
@@ -1203,7 +1216,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Return the current url
-   * 
+   *
    * @return the current url
    */
   @Override
@@ -1214,7 +1227,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
   /**
    * Resets the Loader object and sets the source of the data set to be the
    * supplied InputStream.
-   * 
+   *
    * @param in the source InputStream.
    * @throws IOException always thrown.
    */
@@ -1229,7 +1242,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
   /**
    * Determines and returns (if possible) the structure (internally the header)
    * of the data set as an empty set of instances.
-   * 
+   *
    * @return the structure of the data set as an empty set of Instances
    * @throws IOException if an error occurs
    */
@@ -1259,7 +1272,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
    * Return the full data set. If the structure hasn't yet been determined by a
    * call to getStructure then method should do so before processing the rest of
    * the data set.
-   * 
+   *
    * @return the structure of the data set as an empty set of Instances
    * @throws IOException if there is no source or parsing fails
    */
@@ -1304,7 +1317,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
    * returns null if there are no more instances to get. If the structure hasn't
    * yet been determined by a call to getStructure then method should do so
    * before returning the next instance in the data set.
-   * 
+   *
    * @param structure the dataset header information, will get updated in case
    *          of string or relational attributes
    * @return the next instance in the data set as an Instance object or null if
@@ -1342,7 +1355,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Returns the revision string.
-   * 
+   *
    * @return the revision
    */
   @Override
@@ -1352,7 +1365,7 @@ public class ArffLoader extends AbstractFileLoader implements BatchConverter,
 
   /**
    * Main method.
-   * 
+   *
    * @param args should contain the name of an input file.
    */
   public static void main(String[] args) {

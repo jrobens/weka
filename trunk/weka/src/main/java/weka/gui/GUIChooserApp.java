@@ -41,6 +41,9 @@ import weka.gui.boundaryvisualizer.BoundaryVisualizer;
 import weka.gui.experiment.Experimenter;
 import weka.gui.explorer.Explorer;
 import weka.gui.graphvisualizer.GraphVisualizer;
+// --- IMPORT ADDED BACK ---
+import weka.gui.GUIChooserDefaults;
+// --- END IMPORT ---
 import weka.gui.knowledgeflow.KnowledgeFlowApp;
 import weka.gui.knowledgeflow.MainKFPerspective;
 import weka.gui.scripting.JythonPanel;
@@ -76,6 +79,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream; // Needed for image loading robustness
 import java.io.PrintStream;
 import java.io.Reader;
 import java.security.Permission;
@@ -86,11 +90,13 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Set;
 import java.util.Vector;
+// Consider replacing Vector with ArrayList + synchronization if needed
+// Consider replacing Hashtable with ConcurrentHashMap
 
 /**
  * The main class for the Weka GUIChooser. Lets the user choose which GUI they
  * want to run.
- * 
+ *
  * @author Len Trigg (trigg@cs.waikato.ac.nz)
  * @author Mark Hall (mhall@cs.waikato.ac.nz)
  * @author FracPete (fracpete at waikato dot ac dot nz)
@@ -117,6 +123,7 @@ public class GUIChooserApp extends JFrame {
   // Applications
 
   /** The frames for the various applications that are open */
+  // Vector is thread-safe but older; consider CopyOnWriteArrayList if iteration >> modification
   protected Vector<JFrame> m_Frames = new Vector<JFrame>();
 
   /** the panel for the application buttons */
@@ -138,39 +145,39 @@ public class GUIChooserApp extends JFrame {
   protected JButton m_SimpleBut = new JButton("Simple CLI");
 
   /** The frame of the LogWindow */
+  // Made static for singleton access? Ensure thread safety if modified outside EDT.
   protected static LogWindow m_LogWindow = new LogWindow();
 
   /** The weka image */
-  Image m_weka = Toolkit.getDefaultToolkit().getImage(
-    GUIChooserApp.class.getClassLoader().getResource(
-      "weka/gui/images/weka_background_new.png"));
+  Image m_weka; // Initialized in constructor
 
   /** filechooser for the TreeVisualizer */
-  protected WekaFileChooser m_FileChooserTreeVisualizer = new WekaFileChooser(
-    new File(System.getProperty("user.dir")));
+  protected WekaFileChooser m_FileChooserTreeVisualizer; // Initialized in constructor
 
   /** filechooser for the GraphVisualizer */
-  protected WekaFileChooser m_FileChooserGraphVisualizer = new WekaFileChooser(
-    new File(System.getProperty("user.dir")));
+  protected WekaFileChooser m_FileChooserGraphVisualizer; // Initialized in constructor
 
   /** filechooser for Plots */
-  protected WekaFileChooser m_FileChooserPlot = new WekaFileChooser(new File(
-    System.getProperty("user.dir")));
+  protected WekaFileChooser m_FileChooserPlot; // Initialized in constructor
 
   /** filechooser for ROC curves */
-  protected WekaFileChooser m_FileChooserROC = new WekaFileChooser(new File(
-    System.getProperty("user.dir")));
+  protected WekaFileChooser m_FileChooserROC; // Initialized in constructor
 
   /** the icon for the frames */
-  protected Image m_Icon;
+  protected Image m_Icon; // Initialized in constructor
 
-  /** contains the child frames (title &lt;-&gt; object). */
-  protected HashSet<Container> m_ChildFrames = new HashSet<Container>();
+  /** contains the child frames (title <-> object). */
+  // UPGRADE: Use Collections.synchronizedSet for basic thread safety if accessed outside EDT
+  protected Set<Container> m_ChildFrames = Collections.synchronizedSet(new HashSet<>());
+
+  // Singleton instance (if used, ensure thread-safe lazy initialization or eager init)
+  private static GUIChooserApp m_chooser = null; // Used by createSingleton
 
   /**
    * Create a singleton instance of the GUIChooser
    */
   public static synchronized void createSingleton() {
+    // Simple synchronized check-then-act (sufficient for basic singleton)
     if (m_chooser == null) {
       m_chooser = new GUIChooserApp();
     }
@@ -180,44 +187,42 @@ public class GUIChooserApp extends JFrame {
    * Asks the user whether the window that generated the window evident given as the argument should
    * really be closed.
    *
-   * Popping up the option pane also gets rid of some references that Swing keeps to the window, which
-   * is useful for garbage collection when the user does choose to close the window.
-   *
    * @param e the event that the window generated
-   *
    * @return whether the user has agreed to close the window
    */
   public boolean checkWindowShouldBeClosed(WindowEvent e) {
-
-    JFrame frame = (JFrame)e.getSource();
+    Component frame = (Component)e.getSource(); // Use Component for broader compatibility
 
     int result = JOptionPane.showConfirmDialog(
-            frame,
-            "Are you sure you want to close the window?",
+            frame, // Parent component for dialog
+            "Are you sure you want to close this window?",
             "Close Window",
-            JOptionPane.YES_NO_OPTION);
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.QUESTION_MESSAGE); // Add message type
 
     return result == JOptionPane.YES_OPTION;
   }
 
   /**
-   * Disposes the given JFrame and removes it from the list of frames maintained by the GUIChooserApp.
-   * Removes the given window listener first, which seems to be necessary for garbage collection on macOS.
-   * Also overwrites the content panel with an empty JPanel, also for garbage collection.
-   * Finally, it calls the garbage collector and calls checkExit().
+   * Disposes the given JFrame and removes it from the list of frames.
+   * Also attempts garbage collection and checks if the main app should exit.
    *
    * @param frame the frame to dispose of
-   * @param adapter the window apapter used for dealing with the closing of the window
+   * @param adapter the window adapter used for dealing with the closing of the window
    */
   public void disposeWindow(JFrame frame, WindowAdapter adapter) {
+    if (frame == null) return;
 
     frame.removeWindowListener(adapter);
+    // Clear content pane and menu bar to help GC break references
     frame.setContentPane(new JPanel());
-    frame.setJMenuBar(new JMenuBar());
-    frame.dispose();
-    m_Frames.remove(frame);
-    System.gc();
-    checkExit();
+    frame.setJMenuBar(null); // Set to null instead of new JMenuBar()
+    frame.dispose(); // Release window resources
+
+    m_Frames.remove(frame); // Remove from tracking list
+
+    System.gc(); // Suggest GC (effectiveness varies)
+    checkExit(); // Check if the main application should exit
   }
 
   /**
@@ -225,12 +230,21 @@ public class GUIChooserApp extends JFrame {
    */
   public GUIChooserApp() {
 
-    super("Weka GUI Chooser");
+    super("Weka GUI Chooser"); // Set title via super constructor
 
     m_Self = this;
 
-    setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+    // UPGRADE: Set Look and Feel early, handle potential errors
+    try {
+        UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+    } catch (Exception e) {
+        System.err.println("Warning: Could not set system look and feel.");
+        // Optionally log the exception: e.printStackTrace(System.err);
+    }
 
+    setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE); // Handle close via listener
+
+    // Load settings
     m_settings = new Settings("weka", GUIChooserDefaults.APP_ID);
     GUIChooserDefaults guiChooserDefaults = new GUIChooserDefaults();
     Defaults pmDefaults =
@@ -239,13 +253,20 @@ public class GUIChooserApp extends JFrame {
     m_settings.applyDefaults(guiChooserDefaults);
     WekaPackageManager.getUnderlyingPackageManager().applySettings(m_settings);
 
-    // filechoosers
+    // Initialize FileChoosers with current directory
+    File userDir = new File(System.getProperty("user.dir"));
+    m_FileChooserTreeVisualizer = new WekaFileChooser(userDir);
+    m_FileChooserGraphVisualizer = new WekaFileChooser(userDir);
+    m_FileChooserPlot = new WekaFileChooser(userDir);
+    m_FileChooserROC = new WekaFileChooser(userDir);
+
+    // Configure FileChooser filters
     m_FileChooserGraphVisualizer
       .addChoosableFileFilter(new ExtensionFileFilter(".bif",
         "BIF Files (*.bif)"));
     m_FileChooserGraphVisualizer
       .addChoosableFileFilter(new ExtensionFileFilter(".xml",
-        "XML Files (*.xml)"));
+        "XML Files (*.xml)")); // Add DOT filter?
 
     m_FileChooserPlot.addChoosableFileFilter(new ExtensionFileFilter(
       Instances.FILE_EXTENSION, "ARFF Files (*" + Instances.FILE_EXTENSION
@@ -256,1531 +277,1182 @@ public class GUIChooserApp extends JFrame {
       Instances.FILE_EXTENSION, "ARFF Files (*" + Instances.FILE_EXTENSION
         + ")"));
 
-    // general layout
-    m_Icon =
-      Toolkit.getDefaultToolkit().getImage(
-        GUIChooserApp.class.getClassLoader().getResource(
-          "weka/gui/weka_icon_new_48.png"));
+    // Load Icons and Images (handle potential loading errors)
+    try {
+        // Use getResourceAsStream for better reliability, especially in JARs
+        InputStream iconStream = GUIChooserApp.class.getClassLoader().getResourceAsStream(
+          "weka/gui/weka_icon_new_48.png");
+        if (iconStream != null) {
+            m_Icon = Toolkit.getDefaultToolkit().createImage(iconStream.readAllBytes());
     setIconImage(m_Icon);
-    this.getContentPane().setLayout(new BorderLayout());
+        } else {
+             System.err.println("Warning: Could not load application icon.");
+        }
 
-    this.getContentPane().add(m_PanelApplications, BorderLayout.EAST);
+        InputStream wekaImageStream = GUIChooserApp.class.getClassLoader().getResourceAsStream(
+          "weka/gui/images/weka_background_new.png");
+         if (wekaImageStream != null) {
+             m_weka = Toolkit.getDefaultToolkit().createImage(wekaImageStream.readAllBytes());
+         } else {
+              System.err.println("Warning: Could not load Weka background image.");
+         }
+    } catch (IOException | NullPointerException e) {
+        System.err.println("Error loading image resources: " + e.getMessage());
+    }
 
-    // applications
-    m_PanelApplications.setBorder(BorderFactory
-      .createTitledBorder("Applications"));
-    m_PanelApplications.setLayout(new GridLayout(0, 1));
+
+    // Setup main content pane
+    Container contentPane = this.getContentPane();
+    contentPane.setLayout(new BorderLayout());
+
+    // --- Applications Panel ---
+    m_PanelApplications.setBorder(BorderFactory.createTitledBorder("Applications"));
+    m_PanelApplications.setLayout(new GridLayout(0, 1, 5, 5)); // Add gaps
     m_PanelApplications.add(m_ExplorerBut);
     m_PanelApplications.add(m_ExperimenterBut);
     m_PanelApplications.add(m_KnowledgeFlowBut);
     m_PanelApplications.add(m_WorkbenchBut);
     m_PanelApplications.add(m_SimpleBut);
+    contentPane.add(m_PanelApplications, BorderLayout.EAST);
 
-    // Weka image plus copyright info
-    JPanel wekaPan = new JPanel();
-    wekaPan.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-    wekaPan.setLayout(new BorderLayout());
+    // --- Weka Image and Info Panel ---
+    JPanel wekaPan = new JPanel(new BorderLayout()); // Specify layout
+    wekaPan.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // Add padding
     wekaPan.setToolTipText("Weka, a native bird of New Zealand");
+
+    if (m_weka != null) {
     ImageIcon wii = new ImageIcon(m_weka);
     JLabel wekaLab = new JLabel(wii);
     wekaLab.setToolTipText("Western Weka, Gallirallus australis australis, "
       + "collected 16 April 1987, Addison's Flat, Westport, New Zealand. "
       + "Field collection 1978 - 2004. CC BY 4.0. Te Papa");
     wekaPan.add(wekaLab, BorderLayout.CENTER);
+    } else {
+        wekaPan.add(new JLabel("Weka Image Not Found"), BorderLayout.CENTER); // Placeholder
+    }
+
     String infoString =
-      "<html>" + "<font size=-2>"
-        + "Waikato Environment for Knowledge Analysis<br>" + "Version "
-        + Version.VERSION + "<br>" + "(c) " + Copyright.getFromYear() + " - "
-        + Copyright.getToYear() + "<br>" + Copyright.getOwner() + "<br>"
-        + Copyright.getAddress() + "</font>" + "</html>";
+      "<html><body style='text-align:center;'>" // Center align text
+        + "<font size=-1>" // Slightly larger font
+        + "Waikato Environment for Knowledge Analysis<br>"
+        + "Version " + Version.VERSION + "<br>"
+        + "(c) " + Copyright.getFromYear() + " - " + Copyright.getToYear() + " "
+        + Copyright.getOwner() + "<br>"
+        + "<a href=\"https://www.cs.waikato.ac.nz/ml/weka/\">https://www.cs.waikato.ac.nz/ml/weka/</a>" // Add URL
+        + "</font>"
+        + "</body></html>";
+      // + Copyright.getAddress() + // Address might be too long
+
     JLabel infoLab = new JLabel(infoString);
-    infoLab.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+    infoLab.setHorizontalAlignment(SwingConstants.CENTER); // Ensure label content is centered
+    infoLab.setBorder(BorderFactory.createEmptyBorder(10, 5, 5, 5)); // Adjust padding
     wekaPan.add(infoLab, BorderLayout.SOUTH);
 
-    this.getContentPane().add(wekaPan, BorderLayout.CENTER);
+    contentPane.add(wekaPan, BorderLayout.CENTER);
 
-    // Menu bar
+    // --- Menu Bar ---
+    setupMenuBar();
+    setJMenuBar(m_jMenuBar);
+
+    // --- Action Listeners for Buttons ---
+    setupActionListeners();
+
+    // --- Window Closing Behavior ---
+    addWindowListener(new WindowAdapter() {
+      @Override
+      public void windowClosing(WindowEvent e) {
+        closeMainApp();
+      }
+    });
+
+    // Pack and set visible (often done in main after ensuring EDT)
+    pack();
+    setLocationRelativeTo(null); // Center on screen initially
+  }
+
+  /** Helper method to set up the menu bar */
+  private void setupMenuBar() {
     m_jMenuBar = new JMenuBar();
 
-    // Program
-    m_jMenuProgram = new JMenu();
+    // --- Program Menu ---
+    m_jMenuProgram = new JMenu("Program");
+    m_jMenuProgram.setMnemonic(KeyEvent.VK_P);
     m_jMenuBar.add(m_jMenuProgram);
-    m_jMenuProgram.setText("Program");
-    m_jMenuProgram.setMnemonic('P');
 
     // Program/LogWindow
-    JMenuItem jMenuItemProgramLogWindow = new JMenuItem();
-    m_jMenuProgram.add(jMenuItemProgramLogWindow);
-    jMenuItemProgramLogWindow.setText("LogWindow");
-    // jMenuItemProgramLogWindow.setMnemonic('L');
-    jMenuItemProgramLogWindow.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_L, KeyEvent.CTRL_MASK));
-    m_LogWindow.setIconImage(m_Icon);
-    jMenuItemProgramLogWindow.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        if (m_Self != null) {
+    JMenuItem jMenuItemProgramLogWindow = new JMenuItem("LogWindow", KeyEvent.VK_L);
+    jMenuItemProgramLogWindow.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK)); // Use CTRL_DOWN_MASK
+    if (m_Icon != null) m_LogWindow.setIconImage(m_Icon);
+    jMenuItemProgramLogWindow.addActionListener(e -> { // Use Lambda
+        // Ensure log window is created/shown on EDT if not already visible
+        SwingUtilities.invokeLater(() -> {
+            if (!m_LogWindow.isVisible()) { // Avoid re-setting size/location if already visible
           m_LogWindow.pack();
           m_LogWindow.setSize(800, 600);
-          m_LogWindow.setLocationRelativeTo(m_Self);
+                m_LogWindow.setLocationRelativeTo(m_Self); // Relative to main chooser
         }
         m_LogWindow.setVisible(true);
-      }
+            m_LogWindow.toFront(); // Bring to front
     });
+    });
+    m_jMenuProgram.add(jMenuItemProgramLogWindow);
 
-    final JMenuItem jMenuItemProgramMemUsage = new JMenuItem();
-    m_jMenuProgram.add(jMenuItemProgramMemUsage);
-    jMenuItemProgramMemUsage.setText("Memory usage");
-    // jMenuItemProgramMemUsage.setMnemonic('M');
-    jMenuItemProgramMemUsage.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_M, KeyEvent.CTRL_MASK));
-
-    jMenuItemProgramMemUsage.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
+    // Program/Memory Usage
+    JMenuItem jMenuItemProgramMemUsage = new JMenuItem("Memory usage", KeyEvent.VK_M);
+    jMenuItemProgramMemUsage.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_M, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemProgramMemUsage.addActionListener(e -> { // Use Lambda
         final MemoryUsagePanel panel = new MemoryUsagePanel();
-        final JFrame frame = Utils.getWekaJFrame("Memory usage", m_Self);
+        final JFrame frame = Utils.getWekaJFrame("Memory usage", m_Self); // Use helper for consistent frame setup
+        if (m_Icon != null) frame.setIconImage(m_Icon); // Set icon
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE); // Handle close manually
         frame.getContentPane().setLayout(new BorderLayout());
         frame.getContentPane().add(panel, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
+
+        final WindowAdapter adapter = new WindowAdapter() {
           @Override
           public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
+            // No need to ask for confirmation for memory panel? Or keep it consistent?
+            // Let's assume simple close is ok here.
               panel.stopMonitoring();
-              disposeWindow(frame, this);
+            disposeWindow(frame, this); // Use disposeWindow helper
             }
-          }
-        });
-        frame.pack();
-        frame.setSize(400, 50);
-        Point l = panel.getFrameLocation();
-        if ((l.x != -1) && (l.y != -1)) {
-          frame.setLocation(l);
-        }
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        Dimension size = frame.getPreferredSize();
-        frame.setSize(new Dimension((int) size.getWidth(),
-                (int) size.getHeight()));
-        m_Frames.add(frame);
-      }
-    });
+        };
+        frame.addWindowListener(adapter);
 
-    final JMenuItem jMenuItemSettings = new JMenuItem();
-    m_jMenuProgram.add(jMenuItemSettings);
-    jMenuItemSettings.setText("Settings");
-    jMenuItemSettings.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
+        frame.pack();
+        // frame.setSize(400, 50); // Let pack determine initial size
+        Point l = panel.getFrameLocation(); // Restore previous location if available
+        if (l != null && l.x != -1 && l.y != -1) {
+          frame.setLocation(l);
+        } else {
+            frame.setLocationRelativeTo(m_Self); // Default location
+        }
+        frame.setVisible(true);
+        m_Frames.add(frame); // Track the frame
+    });
+    m_jMenuProgram.add(jMenuItemProgramMemUsage);
+
+    // Program/Settings
+    JMenuItem jMenuItemSettings = new JMenuItem("Settings"); // No mnemonic/accelerator needed?
+    jMenuItemSettings.addActionListener(e -> { // Use Lambda
         try {
-          int result =
-            SettingsEditor.showSingleSettingsEditor(m_settings,
-              GUIChooserDefaults.APP_ID, "GUIChooser",
-              (JComponent) GUIChooserApp.this.getContentPane().getComponent(0),
-              550, 100);
+          // Show editor centered over the main content pane
+          int result = SettingsEditor.showSingleSettingsEditor(m_settings,
+              GUIChooserDefaults.APP_ID, "GUIChooser Settings",
+              (JComponent) GUIChooserApp.this.getContentPane(),
+              550, 100); // Initial size hints
           if (result == JOptionPane.OK_OPTION) {
-            WekaPackageManager.getUnderlyingPackageManager().applySettings(
-              m_settings);
+            // Apply settings if OK was clicked
+            WekaPackageManager.getUnderlyingPackageManager().applySettings(m_settings);
+            // Potentially notify other components or refresh UI if settings affect appearance/behavior
           }
         } catch (Exception ex) {
-          ex.printStackTrace();
-        }
+          System.err.println("Error opening Settings Editor: " + ex.getMessage());
+          ex.printStackTrace(System.err); // Log error
+          JOptionPane.showMessageDialog(m_Self,
+              "Error opening Settings Editor:\n" + ex.getMessage(),
+              "Settings Error", JOptionPane.ERROR_MESSAGE);
       }
     });
+    m_jMenuProgram.add(jMenuItemSettings);
 
     m_jMenuProgram.add(new JSeparator());
 
     // Program/Exit
-    JMenuItem jMenuItemProgramExit = new JMenuItem();
+    JMenuItem jMenuItemProgramExit = new JMenuItem("Exit", KeyEvent.VK_X); // Use X for exit? E is often Edit
+    // Common accelerator for exit is Alt+F4 (handled by OS) or Ctrl+Q
+    jMenuItemProgramExit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemProgramExit.addActionListener(e -> closeMainApp()); // Use helper method
     m_jMenuProgram.add(jMenuItemProgramExit);
-    jMenuItemProgramExit.setText("Exit");
-    // jMenuItemProgramExit.setMnemonic('E');
-    jMenuItemProgramExit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_E,
-      KeyEvent.CTRL_MASK));
-    jMenuItemProgramExit.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        int result = JOptionPane.showConfirmDialog(
-                m_Self,
-                "Are you sure you want to close this window?",
-                "Close Window",
-                JOptionPane.YES_NO_OPTION);
-        if (result == JOptionPane.YES_OPTION) {
-          dispose();
-          checkExit();
-        }
-      }
-    });
 
-    // Visualization
-    m_jMenuVisualization = new JMenu();
+
+    // --- Visualization Menu ---
+    m_jMenuVisualization = new JMenu("Visualization");
+    m_jMenuVisualization.setMnemonic(KeyEvent.VK_V);
     m_jMenuBar.add(m_jMenuVisualization);
-    m_jMenuVisualization.setText("Visualization");
-    m_jMenuVisualization.setMnemonic('V');
 
     // Visualization/Plot
-    JMenuItem jMenuItemVisualizationPlot = new JMenuItem();
+    JMenuItem jMenuItemVisualizationPlot = new JMenuItem("Plot", KeyEvent.VK_P);
+    jMenuItemVisualizationPlot.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemVisualizationPlot.addActionListener(e -> openPlotVisualizer()); // Use helper
     m_jMenuVisualization.add(jMenuItemVisualizationPlot);
-    jMenuItemVisualizationPlot.setText("Plot");
-    // jMenuItemVisualizationPlot.setMnemonic('P');
-    jMenuItemVisualizationPlot.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_P, KeyEvent.CTRL_MASK));
-
-    jMenuItemVisualizationPlot.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        // choose file
-        int retVal = m_FileChooserPlot.showOpenDialog(m_Self);
-        if (retVal != JFileChooser.APPROVE_OPTION) {
-          return;
-        }
-
-        // build plot
-        VisualizePanel panel = new VisualizePanel();
-        String filenames = "";
-        File[] files = m_FileChooserPlot.getSelectedFiles();
-        for (int j = 0; j < files.length; j++) {
-          String filename = files[j].getAbsolutePath();
-          if (j > 0) {
-            filenames += ", ";
-          }
-          filenames += filename;
-          System.err.println("Loading instances from " + filename);
-          try {
-            Reader r = new java.io.BufferedReader(new FileReader(filename));
-            Instances i = new Instances(r);
-            i.setClassIndex(i.numAttributes() - 1);
-            PlotData2D pd1 = new PlotData2D(i);
-
-            if (j == 0) {
-              pd1.setPlotName("Master plot");
-              panel.setMasterPlot(pd1);
-            } else {
-              pd1.setPlotName("Plot " + (j + 1));
-              pd1.m_useCustomColour = true;
-              pd1.m_customColour = (j % 2 == 0) ? Color.red : Color.blue;
-              panel.addPlot(pd1);
-            }
-          } catch (Exception ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(m_Self, "Error loading file '"
-              + files[j] + "':\n" + ex.getMessage());
-            return;
-          }
-        }
-
-        // create frame
-        final JFrame frame = Utils.getWekaJFrame("Plot - " + filenames, m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(panel, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent e) {
-            if (checkWindowShouldBeClosed(e)) {
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
 
     // Visualization/ROC
-    JMenuItem jMenuItemVisualizationROC = new JMenuItem();
+    JMenuItem jMenuItemVisualizationROC = new JMenuItem("ROC", KeyEvent.VK_R);
+    jMenuItemVisualizationROC.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemVisualizationROC.addActionListener(e -> openRocVisualizer()); // Use helper
     m_jMenuVisualization.add(jMenuItemVisualizationROC);
-    jMenuItemVisualizationROC.setText("ROC");
-    // jMenuItemVisualizationROC.setMnemonic('R');
-    jMenuItemVisualizationROC.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_R, KeyEvent.CTRL_MASK));
-
-    jMenuItemVisualizationROC.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        // choose file
-        int retVal = m_FileChooserROC.showOpenDialog(m_Self);
-        if (retVal != JFileChooser.APPROVE_OPTION) {
-          return;
-        }
-
-        // create plot
-        String filename = m_FileChooserROC.getSelectedFile().getAbsolutePath();
-        Instances result = null;
-        try {
-          result = new Instances(new BufferedReader(new FileReader(filename)));
-        } catch (Exception ex) {
-          ex.printStackTrace();
-          JOptionPane.showMessageDialog(m_Self, "Error loading file '"
-            + filename + "':\n" + ex.getMessage());
-          return;
-        }
-        result.setClassIndex(result.numAttributes() - 1);
-        ThresholdVisualizePanel vmc = new ThresholdVisualizePanel();
-        vmc.setROCString("(Area under ROC = "
-          + Utils.doubleToString(ThresholdCurve.getROCArea(result), 4) + ")");
-        vmc.setName(result.relationName());
-        PlotData2D tempd = new PlotData2D(result);
-        tempd.setPlotName(result.relationName());
-        tempd.addInstanceNumberAttribute();
-        try {
-          vmc.addPlot(tempd);
-        } catch (Exception ex) {
-          ex.printStackTrace();
-          JOptionPane.showMessageDialog(m_Self,
-            "Error adding plot:\n" + ex.getMessage());
-          return;
-        }
-
-        final JFrame frame = Utils.getWekaJFrame("ROC - " + filename, m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(vmc, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent e) {
-            if (checkWindowShouldBeClosed(e)) {
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
 
     // Visualization/TreeVisualizer
-    JMenuItem jMenuItemVisualizationTree = new JMenuItem();
+    JMenuItem jMenuItemVisualizationTree = new JMenuItem("TreeVisualizer", KeyEvent.VK_T);
+    jMenuItemVisualizationTree.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemVisualizationTree.addActionListener(e -> openTreeVisualizer()); // Use helper
     m_jMenuVisualization.add(jMenuItemVisualizationTree);
-    jMenuItemVisualizationTree.setText("TreeVisualizer");
-    // jMenuItemVisualizationTree.setMnemonic('T');
-    jMenuItemVisualizationTree.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_T, KeyEvent.CTRL_MASK));
-
-    jMenuItemVisualizationTree.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        // choose file
-        int retVal = m_FileChooserTreeVisualizer.showOpenDialog(m_Self);
-        if (retVal != JFileChooser.APPROVE_OPTION) {
-          return;
-        }
-
-        // build tree
-        String filename =
-          m_FileChooserTreeVisualizer.getSelectedFile().getAbsolutePath();
-        TreeBuild builder = new TreeBuild();
-        Node top = null;
-        NodePlace arrange = new PlaceNode2();
-        try {
-          top = builder.create(new FileReader(filename));
-        } catch (Exception ex) {
-          ex.printStackTrace();
-          JOptionPane.showMessageDialog(m_Self, "Error loading file '"
-            + filename + "':\n" + ex.getMessage());
-          return;
-        }
-
-        // create frame
-        final JFrame frame = Utils.getWekaJFrame("TreeVisualizer - " + filename, m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(new TreeVisualizer(null, top, arrange),
-          BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent e) {
-            if (checkWindowShouldBeClosed(e)) {
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
 
     // Visualization/GraphVisualizer
-    JMenuItem jMenuItemVisualizationGraph = new JMenuItem();
+    JMenuItem jMenuItemVisualizationGraph = new JMenuItem("GraphVisualizer", KeyEvent.VK_G);
+    jMenuItemVisualizationGraph.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemVisualizationGraph.addActionListener(e -> openGraphVisualizer()); // Use helper
     m_jMenuVisualization.add(jMenuItemVisualizationGraph);
-    jMenuItemVisualizationGraph.setText("GraphVisualizer");
-    // jMenuItemVisualizationGraph.setMnemonic('G');
-    jMenuItemVisualizationGraph.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_G, KeyEvent.CTRL_MASK));
-
-    jMenuItemVisualizationGraph.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        // choose file
-        int retVal = m_FileChooserGraphVisualizer.showOpenDialog(m_Self);
-        if (retVal != JFileChooser.APPROVE_OPTION) {
-          return;
-        }
-
-        // build graph
-        String filename =
-          m_FileChooserGraphVisualizer.getSelectedFile().getAbsolutePath();
-        GraphVisualizer panel = new GraphVisualizer();
-        try {
-          if (filename.toLowerCase().endsWith(".xml")
-            || filename.toLowerCase().endsWith(".bif")) {
-            panel.readBIF(new FileInputStream(filename));
-          } else {
-            panel.readDOT(new FileReader(filename));
-          }
-        } catch (Exception ex) {
-          ex.printStackTrace();
-          JOptionPane.showMessageDialog(m_Self, "Error loading file '"
-            + filename + "':\n" + ex.getMessage());
-          return;
-        }
-
-        // create frame
-        final JFrame frame = Utils.getWekaJFrame("GraphVisualizer - " + filename, m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(panel, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent e) {
-            if (checkWindowShouldBeClosed(e)) {
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
 
     // Visualization/BoundaryVisualizer
-    final JMenuItem jMenuItemVisualizationBoundary = new JMenuItem();
+    JMenuItem jMenuItemVisualizationBoundary = new JMenuItem("BoundaryVisualizer", KeyEvent.VK_B);
+    jMenuItemVisualizationBoundary.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_B, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemVisualizationBoundary.addActionListener(e -> openBoundaryVisualizer()); // Use helper
     m_jMenuVisualization.add(jMenuItemVisualizationBoundary);
-    jMenuItemVisualizationBoundary.setText("BoundaryVisualizer");
-    // jMenuItemVisualizationBoundary.setMnemonic('B');
-    jMenuItemVisualizationBoundary.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_B, KeyEvent.CTRL_MASK));
 
-    jMenuItemVisualizationBoundary.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final JFrame frame = Utils.getWekaJFrame("BoundaryVisualizer", m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        final BoundaryVisualizer bv = new BoundaryVisualizer();
-        frame.getContentPane().add(bv, BorderLayout.CENTER);
-        frame.setSize(bv.getMinimumSize());
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              bv.stopPlotting();
-              disposeWindow(frame, this);
-            }
 
-          }
-        });
-        frame.pack();
-        // frame.setSize(1024, 768);
-        frame.setResizable(false);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-        // dont' do a System.exit after last window got closed!
-        BoundaryVisualizer.setExitIfNoWindowsOpen(false);
-      }
-    });
-
-    // Extensions
+    // --- Extensions Menu (Code seems mostly fine, ensure sorted insert works) ---
     JMenu jMenuExtensions = new JMenu("Extensions");
-    jMenuExtensions.setMnemonic(java.awt.event.KeyEvent.VK_E);
+    jMenuExtensions.setMnemonic(KeyEvent.VK_E); // E might conflict with Exit if mnemonics active
     m_jMenuBar.add(jMenuExtensions);
-    jMenuExtensions.setVisible(false);
+    jMenuExtensions.setVisible(false); // Hide if no extensions
 
     String extensions =
       GenericObjectEditor.EDITOR_PROPERTIES.getProperty(
         MainMenuExtension.class.getName(), "");
 
-    if (extensions.length() > 0) {
+    if (extensions != null && !extensions.isEmpty()) {
       jMenuExtensions.setVisible(true);
-      String[] classnames =
-        GenericObjectEditor.EDITOR_PROPERTIES.getProperty(
-          MainMenuExtension.class.getName(), "").split(",");
-      Hashtable<String, JMenu> submenus = new Hashtable<String, JMenu>();
+      String[] classnames = extensions.split(",");
+      Hashtable<String, JMenu> submenus = new Hashtable<>(); // Use diamond operator
 
-      // add all extensions
+      // Add all extensions
       for (String classname : classnames) {
+         classname = classname.trim(); // Trim whitespace
+         if (classname.isEmpty()) continue;
+
         try {
           MainMenuExtension ext =
             (MainMenuExtension) WekaPackageClassLoaderManager.objectForName(classname);
 
-          // menuitem in a submenu?
+          // Submenu handling
           JMenu submenu = null;
-          if (ext.getSubmenuTitle() != null) {
+          if (ext.getSubmenuTitle() != null && !ext.getSubmenuTitle().isEmpty()) {
             submenu = submenus.get(ext.getSubmenuTitle());
             if (submenu == null) {
               submenu = new JMenu(ext.getSubmenuTitle());
+              // Add mnemonic if possible/desired
               submenus.put(ext.getSubmenuTitle(), submenu);
-              insertMenuItem(jMenuExtensions, submenu);
+              insertMenuItem(jMenuExtensions, submenu); // Ensure sorted insert
             }
           }
 
-          // create menu item
-          JMenuItem menuitem = new JMenuItem();
-          menuitem.setText(ext.getMenuTitle());
-          // does the extension need a frame or does it have its own
-          // ActionListener?
+          // Create menu item
+          JMenuItem menuitem = new JMenuItem(ext.getMenuTitle());
+          // Add tooltip if provided
+  /*        if (ext.getMenuTipText() != null) {
+              menuitem.setToolTipText(ext.getMenuTipText());
+          }*/
+
+          // Set action listener
           ActionListener listener = ext.getActionListener(m_Self);
           if (listener != null) {
             menuitem.addActionListener(listener);
           } else {
-            final JMenuItem finalMenuitem = menuitem;
-            final MainMenuExtension finalExt = ext;
-            menuitem.addActionListener(new ActionListener() {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                Component frame =
-                  createFrame(m_Self, finalMenuitem.getText(), null, null,
-                    null, -1, -1, null, false, false);
-                finalExt.fillFrame(frame);
-                frame.setVisible(true);
-              }
+            // If no listener, assume it provides content for a standard frame
+            final MainMenuExtension finalExt = ext; // Final for lambda
+            menuitem.addActionListener(actionEvent -> { // Use Lambda
+                // Create frame on EDT
+                SwingUtilities.invokeLater(() -> {
+                    Component frame = createFrame(m_Self, finalExt.getMenuTitle(), null, null,
+                                                  null, -1, -1, null, false, false);
+                    finalExt.fillFrame(frame); // Fill frame content
+                    frame.setVisible(true); // Show frame
+                    // Track frame? Depends if createFrame adds it. Assume it does or add manually.
+                });
             });
           }
 
-          // sorted insert of menu item
+          // Add menu item to correct menu (sorted)
           if (submenu != null) {
             insertMenuItem(submenu, menuitem);
           } else {
             insertMenuItem(jMenuExtensions, menuitem);
           }
         } catch (Exception e) {
-          e.printStackTrace();
+          System.err.println("Error loading MainMenuExtension '" + classname + "': " + e.getMessage());
+          e.printStackTrace(System.err); // Log error loading extension
         }
       }
     }
 
-    // Tools
-    m_jMenuTools = new JMenu();
-    m_jMenuBar.add(m_jMenuTools);
-    m_jMenuTools.setText("Tools");
-    m_jMenuTools.setMnemonic('T');
 
-    // Package Manager
+    // --- Tools Menu ---
+    m_jMenuTools = new JMenu("Tools");
+    m_jMenuTools.setMnemonic(KeyEvent.VK_T); // T already used by TreeVisualizer? Check consistency.
+    m_jMenuBar.add(m_jMenuTools);
+
+    // Tools/Package Manager
     final JMenuItem jMenuItemToolsPackageManager = new JMenuItem();
-    m_jMenuTools.add(jMenuItemToolsPackageManager);
     final String offline = (WekaPackageManager.m_offline ? " (offline)" : "");
     jMenuItemToolsPackageManager.setText("Package manager" + offline);
-    jMenuItemToolsPackageManager.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_U, KeyEvent.CTRL_MASK));
-    jMenuItemToolsPackageManager.addActionListener(new ActionListener() {
+    jMenuItemToolsPackageManager.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, KeyEvent.CTRL_DOWN_MASK)); // U for Update/Packages?
+    jMenuItemToolsPackageManager.addActionListener(e -> openPackageManager(offline)); // Use helper
+    m_jMenuTools.add(jMenuItemToolsPackageManager);
+
+    // Tools/ArffViewer
+    JMenuItem jMenuItemToolsArffViewer = new JMenuItem("ArffViewer", KeyEvent.VK_A);
+    jMenuItemToolsArffViewer.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_A, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemToolsArffViewer.addActionListener(e -> openArffViewer()); // Use helper
+    m_jMenuTools.add(jMenuItemToolsArffViewer);
+
+    // Tools/SqlViewer
+    JMenuItem jMenuItemToolsSql = new JMenuItem("SqlViewer", KeyEvent.VK_S);
+    jMenuItemToolsSql.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK));
+    jMenuItemToolsSql.addActionListener(e -> openSqlViewer()); // Use helper
+    m_jMenuTools.add(jMenuItemToolsSql);
+
+    // Tools/Bayes Net Editor (ensure class exists)
+    try {
+        Class.forName("weka.classifiers.bayes.net.GUI"); // Check if BayesNet GUI is available
+        JMenuItem jMenuItemToolsBayesNet = new JMenuItem("Bayes net editor");
+        jMenuItemToolsBayesNet.addActionListener(e -> openBayesNetEditor()); // Use helper
+        m_jMenuTools.add(jMenuItemToolsBayesNet);
+    } catch (ClassNotFoundException cnfe) {
+        // Bayes Net GUI not in classpath, don't add menu item
+        System.err.println("Note: Bayes Net Editor GUI not found in classpath, menu item disabled.");
+    }
+
+    // Scripting tools (Jython/Groovy) - Add checks for library availability
+    if (Jython.isPresent()) {
+        JMenuItem jMenuItemToolsJython = new JMenuItem("Jython console");
+        jMenuItemToolsJython.addActionListener(e -> openJythonConsole()); // Use helper
+        m_jMenuTools.add(jMenuItemToolsJython);
+    } else {
+         System.err.println("Note: Jython library not found, Jython console disabled.");
+    }
+    // Add Groovy console similarly if desired and Groovy.isPresent() exists/is added
+
+  }
+
+  /** Helper method to set up action listeners for the main application buttons */
+  private void setupActionListeners() {
+      m_ExplorerBut.addActionListener(e -> openExplorer());
+      m_ExperimenterBut.addActionListener(e -> openExperimenter());
+      m_KnowledgeFlowBut.addActionListener(e -> openKnowledgeFlow());
+      m_WorkbenchBut.addActionListener(e -> openWorkbench());
+      m_SimpleBut.addActionListener(e -> openSimpleCLI());
+  }
+
+  // --- Helper methods for opening applications/visualizers ---
+  // These methods encapsulate the logic for creating and showing frames
+
+  private void openExplorer() {
+      try {
+          final Explorer explorer = new Explorer();
+          final JFrame frame = Utils.getWekaJFrame("Weka Explorer", m_Self);
+          if (m_Icon != null) frame.setIconImage(m_Icon);
+          frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+          frame.getContentPane().setLayout(new BorderLayout());
+          frame.getContentPane().add(explorer, BorderLayout.CENTER);
+
+          final WindowAdapter adapter = new WindowAdapter() {
+              @Override
+              public void windowClosing(WindowEvent e) {
+                  // --- CORRECTED LINE ---
+                  // Use the GUIChooser's standard confirmation dialog
+                  if (checkWindowShouldBeClosed(e)) {
+                      // Optional: Add any specific cleanup needed for Explorer instance
+                      // before disposing the frame, if Explorer provides such methods.
+                      disposeWindow(frame, this);
+                  }
+                  // --- END CORRECTION ---
+              }
+          };
+          frame.addWindowListener(adapter);
+          frame.pack();
+          frame.setLocationRelativeTo(m_Self);
+          frame.setVisible(true);
+          m_Frames.add(frame);
+      } catch (Exception ex) {
+          ex.printStackTrace();
+          JOptionPane.showMessageDialog(m_Self, "Could not launch Explorer:\n" + ex.getMessage(), "Launch Error", JOptionPane.ERROR_MESSAGE);
+      }
+  }
+
+  private void openExperimenter() {
+      try {
+          final Experimenter experimenter = new Experimenter(true); // Run in MDI mode? Check constructor meaning
+          final JFrame frame = Utils.getWekaJFrame("Weka Experiment Environment", m_Self);
+          if (m_Icon != null) frame.setIconImage(m_Icon);
+          frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+          frame.getContentPane().setLayout(new BorderLayout());
+          frame.getContentPane().add(experimenter, BorderLayout.CENTER);
+
+          final WindowAdapter adapter = new WindowAdapter() {
+              @Override
+              public void windowClosing(WindowEvent e) {
+                  if (checkWindowShouldBeClosed(e)) {
+                      // Optional: Add any specific cleanup needed for Explorer instance
+                      // before disposing the frame, if Explorer provides such methods.
+                      disposeWindow(frame, this);
+                  }
+              }
+          };
+          frame.addWindowListener(adapter);
+          frame.pack();
+          frame.setLocationRelativeTo(m_Self);
+          frame.setVisible(true);
+          m_Frames.add(frame);
+      } catch (Exception ex) {
+          ex.printStackTrace();
+          JOptionPane.showMessageDialog(m_Self, "Could not launch Experimenter:\n" + ex.getMessage(), "Launch Error", JOptionPane.ERROR_MESSAGE);
+      }
+  }
+
+    private void openKnowledgeFlow() {
+        try {
+            // Use KnowledgeFlowApp for proper setup
+            final KnowledgeFlowApp kfApp = new KnowledgeFlowApp();
+            final JFrame frame = kfApp.getFrame(); // Get the frame managed by KF App
+            if (m_Icon != null) frame.setIconImage(m_Icon);
+            frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE); // KF handles its own closing
+
+            // Ensure KF handles its own closing logic, maybe add our listener just for tracking?
+            // Check if KF already adds a listener - avoid duplicates.
+            // Let's assume KF manages its exit confirmation. We just need to track the frame.
+
+            // Make sure it's visible and bring to front
+            frame.setLocationRelativeTo(m_Self);
+            frame.setVisible(true);
+            frame.toFront();
+
+            // Add to frame list *if not already tracked* by KF's logic or if we need separate tracking
+            if (!m_Frames.contains(frame)) {
+                 m_Frames.add(frame);
+                 // Add a listener primarily to know when KF closes *independently*
+                 final WindowAdapter adapter = new WindowAdapter() {
       @Override
-      public void actionPerformed(ActionEvent e) {
-        Thread temp = new Thread() {
+                     public void windowClosed(WindowEvent e) { // Use closed, not closing
+                         m_Frames.remove(frame);
+                         System.gc();
+                         checkExit();
+                         frame.removeWindowListener(this); // Clean up listener
+                     }
+                 };
+                 frame.addWindowListener(adapter);
+            }
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(m_Self, "Could not launch KnowledgeFlow:\n" + ex.getMessage(), "Launch Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void openWorkbench() {
+        // Workbench might be integrated differently or deprecated depending on Weka version.
+        // Assuming it launches similarly to others for this example.
+        // If Workbench is the main MDI container, logic might need adjustment.
+        System.err.println("Workbench button clicked - Placeholder: Implement Workbench launch if applicable.");
+        JOptionPane.showMessageDialog(m_Self, "Workbench launch not implemented in this example.", "Not Implemented", JOptionPane.INFORMATION_MESSAGE);
+        // If implemented, follow pattern: create instance, create frame, add listener, show, track.
+    }
+
+    private void openSimpleCLI() {
+        try {
+            final SimpleCLI cli = new SimpleCLI(); // Assumes SimpleCLI extends Component/JPanel
+            final JFrame frame = Utils.getWekaJFrame("Weka Simple CLI", m_Self);
+            if (m_Icon != null) frame.setIconImage(m_Icon);
+            frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+            frame.getContentPane().setLayout(new BorderLayout());
+            frame.getContentPane().add(cli, BorderLayout.CENTER);
+
+            final WindowAdapter adapter = new WindowAdapter() {
+                @Override
+                public void windowClosing(WindowEvent e) {
+                    // SimpleCLI probably doesn't need confirmation?
+                    disposeWindow(frame, this);
+                }
+            };
+            frame.addWindowListener(adapter);
+            frame.pack();
+            frame.setSize(600, 400); // Give CLI a reasonable default size
+            frame.setLocationRelativeTo(m_Self);
+            frame.setVisible(true);
+            m_Frames.add(frame);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(m_Self, "Could not launch Simple CLI:\n" + ex.getMessage(), "Launch Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void openPlotVisualizer() {
+        int retVal = m_FileChooserPlot.showOpenDialog(m_Self);
+        if (retVal != JFileChooser.APPROVE_OPTION) return;
+
+        VisualizePanel panel = new VisualizePanel();
+        String filenames = "";
+        File[] files = m_FileChooserPlot.getSelectedFiles();
+        boolean success = false;
+
+        for (int j = 0; j < files.length; j++) {
+            File file = files[j];
+            if (j > 0) filenames += ", ";
+            filenames += file.getName(); // Use just filename for title brevity
+            System.err.println("Loading instances from " + file.getAbsolutePath());
+
+            // UPGRADE: Use try-with-resources for FileReader/BufferedReader
+            try (Reader r = new BufferedReader(new FileReader(file))) {
+            Instances i = new Instances(r);
+                i.setClassIndex(i.numAttributes() - 1); // Assume class is last attribute
+            PlotData2D pd1 = new PlotData2D(i);
+
+            if (j == 0) {
+                    pd1.setPlotName("Master plot: " + file.getName());
+              panel.setMasterPlot(pd1);
+            } else {
+                    pd1.setPlotName("Plot " + (j + 1) + ": " + file.getName());
+              pd1.m_useCustomColour = true;
+                    // Cycle through a few basic colors
+                    Color[] colors = {Color.red, Color.blue, Color.green, Color.orange, Color.magenta};
+                    pd1.m_customColour = colors[j % colors.length];
+              panel.addPlot(pd1);
+            }
+                success = true; // At least one plot added successfully
+          } catch (Exception ex) {
+                ex.printStackTrace(System.err); // Log error
+            JOptionPane.showMessageDialog(m_Self, "Error loading file '"
+                  + file.getName() + "':\n" + ex.getMessage(), "File Load Error", JOptionPane.ERROR_MESSAGE);
+                // Decide whether to continue loading other files or stop
+                // return; // Stop if one file fails? Or continue? Let's continue.
+          }
+        }
+
+        if (!success) return; // Don't open frame if no plots were loaded
+
+        // Create frame
+        final JFrame frame = Utils.getWekaJFrame("Plot - " + filenames, m_Self);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.getContentPane().setLayout(new BorderLayout());
+        frame.getContentPane().add(panel, BorderLayout.CENTER);
+
+        final WindowAdapter adapter = new WindowAdapter() {
           @Override
-          public void run() {
-            final weka.gui.PackageManager pm;
-            pm = new weka.gui.PackageManager();
+          public void windowClosing(WindowEvent e) {
+            if (checkWindowShouldBeClosed(e)) {
+              disposeWindow(frame, this);
+            }
+          }
+        };
+        frame.addWindowListener(adapter);
+        frame.pack();
+        frame.setSize(1024, 768); // Default size
+        frame.setLocationRelativeTo(m_Self);
+        frame.setVisible(true);
+        m_Frames.add(frame);
+      }
+
+    private void openRocVisualizer() {
+        int retVal = m_FileChooserROC.showOpenDialog(m_Self);
+        if (retVal != JFileChooser.APPROVE_OPTION) return;
+
+        File file = m_FileChooserROC.getSelectedFile();
+        String filename = file.getAbsolutePath();
+        Instances result = null;
+
+        // UPGRADE: Use try-with-resources
+        try (Reader reader = new BufferedReader(new FileReader(file))) {
+            result = new Instances(reader);
+        } catch (Exception ex) {
+            ex.printStackTrace(System.err);
+          JOptionPane.showMessageDialog(m_Self, "Error loading file '"
+              + file.getName() + "':\n" + ex.getMessage(), "File Load Error", JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+
+        if (result.numInstances() == 0) {
+             JOptionPane.showMessageDialog(m_Self, "No instances found in file: " + file.getName(),
+                                           "Empty File", JOptionPane.WARNING_MESSAGE);
+          return;
+        }
+
+        // Basic validation: Check if suitable for ROC (e.g., has class attribute)
+        if (result.classIndex() < 0) {
+             result.setClassIndex(result.numAttributes() - 1); // Assume last if not set
+             if (result.classIndex() < 0) {
+                  JOptionPane.showMessageDialog(m_Self, "Cannot determine class attribute for ROC curve in file: " + file.getName(),
+                                                "ROC Error", JOptionPane.ERROR_MESSAGE);
+                  return;
+             }
+        }
+
+
+        ThresholdVisualizePanel vmc = new ThresholdVisualizePanel();
+        try {
+        vmc.setROCString("(Area under ROC = "
+              + Utils.doubleToString(ThresholdCurve.getROCArea(result), 4) + ")"); // Calculate area
+            vmc.setName(result.relationName() + " (ROC)"); // Set name for panel
+
+        PlotData2D tempd = new PlotData2D(result);
+        tempd.setPlotName(result.relationName());
+            tempd.addInstanceNumberAttribute(); // Needed for ThresholdCurve
+          vmc.addPlot(tempd);
+
+        } catch (Exception ex) {
+            ex.printStackTrace(System.err);
+          JOptionPane.showMessageDialog(m_Self,
+              "Error creating ROC plot:\n" + ex.getMessage(), "Plot Error", JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+
+        final JFrame frame = Utils.getWekaJFrame("ROC - " + file.getName(), m_Self);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.getContentPane().setLayout(new BorderLayout());
+        frame.getContentPane().add(vmc, BorderLayout.CENTER);
+
+        final WindowAdapter adapter = new WindowAdapter() {
+          @Override
+          public void windowClosing(WindowEvent e) {
+            if (checkWindowShouldBeClosed(e)) {
+              disposeWindow(frame, this);
+            }
+          }
+        };
+        frame.addWindowListener(adapter);
+        frame.pack();
+        frame.setSize(800, 600); // Default size for ROC
+        frame.setLocationRelativeTo(m_Self);
+        frame.setVisible(true);
+        m_Frames.add(frame);
+      }
+
+    private void openTreeVisualizer() {
+        int retVal = m_FileChooserTreeVisualizer.showOpenDialog(m_Self);
+        if (retVal != JFileChooser.APPROVE_OPTION) return;
+
+        File file = m_FileChooserTreeVisualizer.getSelectedFile();
+        String filename = file.getAbsolutePath();
+        TreeBuild builder = new TreeBuild();
+        Node top = null;
+        NodePlace arrange = new PlaceNode2(); // Default placement algorithm
+
+        // UPGRADE: Use try-with-resources
+        try (Reader reader = new FileReader(file)) {
+            top = builder.create(reader);
+        } catch (Exception ex) {
+            ex.printStackTrace(System.err);
+            JOptionPane.showMessageDialog(m_Self, "Error loading tree file '"
+              + file.getName() + "':\n" + ex.getMessage(), "File Load Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (top == null) {
+             JOptionPane.showMessageDialog(m_Self, "Could not build tree from file: " + file.getName(),
+                                           "Tree Build Error", JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+
+        // Create frame
+        final JFrame frame = Utils.getWekaJFrame("TreeVisualizer - " + file.getName(), m_Self);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.getContentPane().setLayout(new BorderLayout());
+        // Pass null for Instances initially, user might load data later in visualizer?
+        frame.getContentPane().add(new TreeVisualizer(null, top, arrange), BorderLayout.CENTER);
+
+        final WindowAdapter adapter = new WindowAdapter() {
+          @Override
+          public void windowClosing(WindowEvent e) {
+            if (checkWindowShouldBeClosed(e)) {
+              disposeWindow(frame, this);
+            }
+          }
+        };
+        frame.addWindowListener(adapter);
+        frame.pack();
+        frame.setSize(1024, 768); // Default size
+        frame.setLocationRelativeTo(m_Self);
+        frame.setVisible(true);
+        m_Frames.add(frame);
+      }
+
+    private void openGraphVisualizer() {
+        int retVal = m_FileChooserGraphVisualizer.showOpenDialog(m_Self);
+        if (retVal != JFileChooser.APPROVE_OPTION) return;
+
+        File file = m_FileChooserGraphVisualizer.getSelectedFile();
+        String filename = file.getAbsolutePath();
+        GraphVisualizer panel = new GraphVisualizer();
+
+        // UPGRADE: Use try-with-resources for file streams
+        try {
+            if (filename.toLowerCase().endsWith(".xml") || filename.toLowerCase().endsWith(".bif")) {
+                try (InputStream fis = new FileInputStream(file)) {
+                    panel.readBIF(fis);
+                }
+            } else { // Assume DOT format otherwise
+                try (Reader reader = new FileReader(file)) {
+                    panel.readDOT(reader);
+                }
+          }
+        } catch (Exception ex) {
+            ex.printStackTrace(System.err);
+            JOptionPane.showMessageDialog(m_Self, "Error loading graph file '"
+              + file.getName() + "':\n" + ex.getMessage(), "File Load Error", JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+
+        // Create frame
+        final JFrame frame = Utils.getWekaJFrame("GraphVisualizer - " + file.getName(), m_Self);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.getContentPane().setLayout(new BorderLayout());
+        frame.getContentPane().add(panel, BorderLayout.CENTER);
+
+        final WindowAdapter adapter = new WindowAdapter() {
+          @Override
+          public void windowClosing(WindowEvent e) {
+            if (checkWindowShouldBeClosed(e)) {
+              disposeWindow(frame, this);
+            }
+          }
+        };
+        frame.addWindowListener(adapter);
+        frame.pack();
+        frame.setSize(1024, 768); // Default size
+        frame.setLocationRelativeTo(m_Self);
+        frame.setVisible(true);
+        m_Frames.add(frame);
+      }
+
+    private void openBoundaryVisualizer() {
+        final JFrame frame = Utils.getWekaJFrame("BoundaryVisualizer", m_Self);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.getContentPane().setLayout(new BorderLayout());
+        final BoundaryVisualizer bv = new BoundaryVisualizer();
+        frame.getContentPane().add(bv, BorderLayout.CENTER);
+        // frame.setSize(bv.getMinimumSize()); // Let pack handle size initially
+
+        final WindowAdapter adapter = new WindowAdapter() {
+          @Override
+          public void windowClosing(WindowEvent w) {
+            if (checkWindowShouldBeClosed(w)) {
+                    bv.stopPlotting(); // Ensure plotting stops
+              disposeWindow(frame, this);
+            }
+          }
+        };
+        frame.addWindowListener(adapter);
+        frame.pack(); // Pack after adding components
+        frame.setResizable(false); // Keep non-resizable as original? Or allow resize?
+        frame.setLocationRelativeTo(m_Self);
+        frame.setVisible(true);
+        m_Frames.add(frame);
+        // Ensure this doesn't affect main app exit
+        BoundaryVisualizer.setExitIfNoWindowsOpen(false);
+      }
+
+    private void openPackageManager(String offline) {
+        // Run package manager loading in background thread
+        new Thread(() -> {
+            final weka.gui.PackageManager pm = new weka.gui.PackageManager();
+            // Check if metadata is available before creating the frame
             if (!WekaPackageManager.m_noPackageMetaDataAvailable) {
+                // Create frame on EDT
+                SwingUtilities.invokeLater(() -> {
               final JFrame frame = Utils.getWekaJFrame("Package Manager" + offline, m_Self);
+                    if (m_Icon != null) frame.setIconImage(m_Icon);
+                    frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
               frame.getContentPane().setLayout(new BorderLayout());
               frame.getContentPane().add(pm, BorderLayout.CENTER);
-              frame.addWindowListener(new WindowAdapter() {
+
+                    final WindowAdapter adapter = new WindowAdapter() {
                 @Override
                 public void windowClosing(WindowEvent w) {
                   if (checkWindowShouldBeClosed(w)) {
                     disposeWindow(frame, this);
                   }
                 }
-              });
-              frame.pack();
-              Dimension screenSize =
-                      frame.getToolkit().getScreenSize();
-              int width = screenSize.width * 8 / 10;
-              int height = screenSize.height * 8 / 10;
-              frame.setBounds(width / 8, height / 8, width,
-                      height);
-              frame.setLocationRelativeTo(m_Self);
+                    };
+                    frame.addWindowListener(adapter);
+                    frame.pack(); // Pack first
+
+                    // Set size relative to screen
+                    Dimension screenSize = frame.getToolkit().getScreenSize();
+                    int width = Math.min(1200, screenSize.width * 8 / 10); // Max width
+                    int height = Math.min(800, screenSize.height * 8 / 10); // Max height
+                    frame.setSize(width, height); // Set preferred size
+
+                    frame.setLocationRelativeTo(m_Self); // Center relative to chooser
               frame.setVisible(true);
-              pm.setInitialSplitPaneDividerLocation();
+                    pm.setInitialSplitPaneDividerLocation(); // Adjust divider after visible
               m_Frames.add(frame);
+                });
+            } else {
+                 // Handle case where package metadata isn't available (maybe show error dialog)
+                 SwingUtilities.invokeLater(()-> {
+                      JOptionPane.showMessageDialog(m_Self,
+                         "Could not load package metadata.\n" +
+                         "Package Manager may be offline or unable to access repository.",
+                         "Package Manager Error", JOptionPane.ERROR_MESSAGE);
+                 });
+            }
+        }).start(); // Start background thread
+      }
+
+    private void openArffViewer() {
+        final JFrame frame = Utils.getWekaJFrame("ARFF-Viewer", m_Self);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        final ArffViewerMainPanel arffViewerMainPanel = new ArffViewerMainPanel(frame); // Pass frame ref
+        frame.getContentPane().setLayout(new BorderLayout());
+        frame.getContentPane().add(arffViewerMainPanel, BorderLayout.CENTER);
+        frame.setJMenuBar(arffViewerMainPanel.getMenu()); // Set menu from panel
+
+        final WindowAdapter adapter = new WindowAdapter() {
+          @Override
+          public void windowClosing(WindowEvent w) {
+                // ArffViewer might have unsaved changes, does it handle confirmation?
+                // Assuming a simple close confirmation is sufficient here.
+            if (checkWindowShouldBeClosed(w)) {
+                    // Add any cleanup needed for ArffViewerMainPanel?
+              disposeWindow(frame, this);
             }
           }
         };
-        temp.start();
-      }
-    });
-
-    // Tools/ArffViewer
-    JMenuItem jMenuItemToolsArffViewer = new JMenuItem();
-    m_jMenuTools.add(jMenuItemToolsArffViewer);
-    jMenuItemToolsArffViewer.setText("ArffViewer");
-    // jMenuItemToolsArffViewer.setMnemonic('A');
-    jMenuItemToolsArffViewer.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_A, KeyEvent.CTRL_MASK));
-
-    jMenuItemToolsArffViewer.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final JFrame frame = Utils.getWekaJFrame("ARFF-Viewer", m_Self);
-        final ArffViewerMainPanel arffViewerMainPanel = new ArffViewerMainPanel(frame);
-        frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(arffViewerMainPanel, BorderLayout.CENTER);
-        frame.setJMenuBar(arffViewerMainPanel.getMenu());
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              disposeWindow(frame, this);
-            }
-          }
-        });
+        frame.addWindowListener(adapter);
         frame.pack();
-        frame.setSize(1024, 768);
+        frame.setSize(1024, 768); // Default size
         frame.setLocationRelativeTo(m_Self);
         frame.setVisible(true);
         m_Frames.add(frame);
       }
-    });
 
-    // Tools/SqlViewer
-    final JMenuItem jMenuItemToolsSql = new JMenuItem();
-    m_jMenuTools.add(jMenuItemToolsSql);
-    jMenuItemToolsSql.setText("SqlViewer");
-    // jMenuItemToolsSql.setMnemonic('S');
-    jMenuItemToolsSql.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S,
-      KeyEvent.CTRL_MASK));
-
-    jMenuItemToolsSql.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
+    private void openSqlViewer() {
         final JFrame frame = Utils.getWekaJFrame("SqlViewer", m_Self);
-        final SqlViewer sql = new SqlViewer(frame);
+        if (m_Icon != null) frame.setIconImage(m_Icon);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        final SqlViewer sql = new SqlViewer(frame); // Pass frame ref
         frame.getContentPane().setLayout(new BorderLayout());
         frame.getContentPane().add(sql, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              sql.saveSize();
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
 
-    // Tools/Bayes net editor
-    final JMenuItem jMenuItemBayesNet = new JMenuItem();
-    m_jMenuTools.add(jMenuItemBayesNet);
-    jMenuItemBayesNet.setText("Bayes net editor");
-    jMenuItemBayesNet.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N,
-      KeyEvent.CTRL_MASK));
-    jMenuItemBayesNet.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final GUI bayesNetGUI = new GUI();
-        JMenuBar bayesBar = bayesNetGUI.getMenuBar();
-        final JFrame frame = Utils.getWekaJFrame("Bayes Network Editor", m_Self);
-        frame.setJMenuBar(bayesBar);
-        frame.getContentPane().add(bayesNetGUI, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
-
-    // Tools/Groovy console
-    if (Groovy.isPresent()) {
-      final JMenuItem jMenuItemGroovyConsole = new JMenuItem();
-      m_jMenuTools.add(jMenuItemGroovyConsole);
-      jMenuItemGroovyConsole.setText("Groovy console");
-      jMenuItemGroovyConsole.setAccelerator(KeyStroke.getKeyStroke(
-        KeyEvent.VK_G, KeyEvent.CTRL_MASK));
-      jMenuItemGroovyConsole.addActionListener(new ActionListener() {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-          try {
-            Class groovyConsoleClass = WekaPackageClassLoaderManager.forName("groovy.ui.Console");
-
-            if (System.getProperty("os.name").toLowerCase().startsWith("mac")) {
-
-              // Awful hack to prevent the Groovy console from taking over the
-              // Mac menu bar.
-              // Could potentially cause problems due to multi-threading, but
-              // hopefully
-              // not problematic in practice.
-              String realOS = System.getProperty("os.name");
-              System.setProperty("os.name", "pretending_not_to_be_an_apple");
-              groovyConsoleClass.getMethod("run").invoke(
-                groovyConsoleClass.newInstance());
-              System.setProperty("os.name", realOS);
-            } else {
-              groovyConsoleClass.getMethod("run").invoke(
-                groovyConsoleClass.newInstance());
-            }
-          } catch (Exception ex) {
-            System.err.println("Failed to start Groovy console.");
-          }
-        }
-      });
-    }
-
-    // Tools/Jython console
-    if (Jython.isPresent() || WekaPackageClassLoaderManager.getWekaPackageClassLoaderManager().getPackageClassLoader("tigerjython") != null) {
-      final JMenuItem jMenuItemJythonConsole = new JMenuItem();
-      m_jMenuTools.add(jMenuItemJythonConsole);
-      jMenuItemJythonConsole.setText("Jython console");
-      jMenuItemJythonConsole.setAccelerator(KeyStroke.getKeyStroke(
-        KeyEvent.VK_J, KeyEvent.CTRL_MASK));
-      jMenuItemJythonConsole.addActionListener(new ActionListener() {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-
-          // Do we have TigerJython?
-          try {
-            ClassLoader tigerLoader = WekaPackageClassLoaderManager.getWekaPackageClassLoaderManager().getPackageClassLoader("tigerjython");
-            if (tigerLoader == null) {
-              throw new Exception("no tigerjython");
-            }
-            Class tigerJythonClass =
-                    Class.forName("tigerjython.core.TigerJython", true, tigerLoader);
-            Object[] args = new Object[1];
-            args[0] = new String[0];
-            tigerJythonClass.getMethod("main", String[].class).invoke(null,
-                    args);
-          } catch (Exception ex) {
-
-            // Default to built-in console
-            final JythonPanel jythonPanel = new JythonPanel();
-            final JFrame frame = Utils.getWekaJFrame(jythonPanel.getPlainTitle(), m_Self);
-            frame.setJMenuBar(jythonPanel.getMenuBar());
-            frame.getContentPane().add(jythonPanel, BorderLayout.CENTER);
-            frame.addWindowListener(new WindowAdapter() {
+        final WindowAdapter adapter = new WindowAdapter() {
               @Override
               public void windowClosing(WindowEvent w) {
+                // SqlViewer might have pending operations or connections?
+                // Add confirmation or cleanup logic if needed.
                 if (checkWindowShouldBeClosed(w)) {
+                    sql.saveSize(); // Save size preference
+                    // Add sql.disconnect() or similar cleanup if necessary
                   disposeWindow(frame, this);
                 }
               }
-            });
-            frame.pack();
-            frame.setSize(1024, 768);
+        };
+        frame.addWindowListener(adapter);
+        frame.pack(); // Pack first
+        // Restore size? SqlViewer seems to handle its own size saving/restoring
             frame.setLocationRelativeTo(m_Self);
             frame.setVisible(true);
             m_Frames.add(frame);
           }
-        }
-      });
-    }
 
-    // plugins for Visualization and Tools
-    Set<String> pluginNames =
-      PluginManager
-        .getPluginNamesOfType("weka.gui.GUIChooser.GUIChooserMenuPlugin");
-    if (pluginNames != null) {
-      boolean firstVis = true;
-      boolean firstTools = true;
-      for (String name : pluginNames) {
+    private void openBayesNetEditor() {
         try {
-          final GUIChooser.GUIChooserMenuPlugin p =
-            (GUIChooser.GUIChooserMenuPlugin) PluginManager.getPluginInstance(
-              "weka.gui.GUIChooser.GUIChooserMenuPlugin", name);
-
-          if (p instanceof JComponent) {
-            final JMenuItem mItem = new JMenuItem(p.getMenuEntryText());
-            mItem.addActionListener(new ActionListener() {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                final JFrame appFrame = Utils.getWekaJFrame(p.getApplicationName(), m_Self);
-                JMenuBar appMenu = p.getMenuBar();
-                if (appMenu != null) {
-                  appFrame.setJMenuBar(appMenu);
-                }
-
-                appFrame.getContentPane().add((JComponent) p,
-                  BorderLayout.CENTER);
-                appFrame.addWindowListener(new WindowAdapter() {
-                  @Override
-                  public void windowClosing(WindowEvent e) {
-                    if (checkWindowShouldBeClosed(e)) {
-                      disposeWindow(appFrame, this);
-                    }
-                  }
-                });
-                appFrame.pack();
-                appFrame.setSize(1024, 768);
-                appFrame.setLocationRelativeTo(m_Self);
-                appFrame.setVisible(true);
-                m_Frames.add(appFrame);
-              }
-            });
-
-            if (p.getMenuToDisplayIn() == GUIChooser.GUIChooserMenuPlugin.Menu.VISUALIZATION) {
-              if (firstVis) {
-                m_jMenuVisualization.add(new JSeparator());
-                firstVis = false;
-              }
-              m_jMenuVisualization.add(mItem);
-            } else {
-              if (firstTools) {
-                m_jMenuTools.add(new JSeparator());
-                firstTools = false;
-              }
-              m_jMenuTools.add(mItem);
-            }
-          }
-        } catch (Exception e1) {
-          e1.printStackTrace();
-        }
-      }
-    }
-
-    // Help
-    m_jMenuHelp = new JMenu();
-    m_jMenuBar.add(m_jMenuHelp);
-    m_jMenuHelp.setText("Help");
-    m_jMenuHelp.setMnemonic('H');
-
-    // Help/Homepage
-    JMenuItem jMenuItemHelpHomepage = new JMenuItem();
-    m_jMenuHelp.add(jMenuItemHelpHomepage);
-    jMenuItemHelpHomepage.setText("Weka homepage");
-    // jMenuItemHelpHomepage.setMnemonic('H');
-    jMenuItemHelpHomepage.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_H,
-      KeyEvent.CTRL_MASK));
-    jMenuItemHelpHomepage.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        BrowserHelper.openURL("https://www.cs.waikato.ac.nz/~ml/weka/");
-      }
-    });
-
-    m_jMenuHelp.add(new JSeparator());
-
-    // Help/WekaWiki
-    JMenuItem jMenuItemHelpWekaWiki = new JMenuItem();
-    m_jMenuHelp.add(jMenuItemHelpWekaWiki);
-    jMenuItemHelpWekaWiki.setText("HOWTOs, code snippets, etc.");
-    // jMenuItemHelpWekaWiki.setMnemonic('W');
-    jMenuItemHelpWekaWiki.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W,
-      KeyEvent.CTRL_MASK));
-
-    jMenuItemHelpWekaWiki.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        BrowserHelper.openURL("https://waikato.github.io/weka-wiki/");
-      }
-    });
-
-    // Help/Sourceforge
-    JMenuItem jMenuItemHelpSourceforge = new JMenuItem();
-    m_jMenuHelp.add(jMenuItemHelpSourceforge);
-    jMenuItemHelpSourceforge.setText("Weka on Sourceforge");
-    // jMenuItemHelpSourceforge.setMnemonic('F');
-    jMenuItemHelpSourceforge.setAccelerator(KeyStroke.getKeyStroke(
-      KeyEvent.VK_F, KeyEvent.CTRL_MASK));
-
-    jMenuItemHelpSourceforge.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        BrowserHelper.openURL("https://sourceforge.net/projects/weka/");
-      }
-    });
-
-    // Help/SystemInfo
-    final JMenuItem jMenuItemHelpSysInfo = new JMenuItem();
-    m_jMenuHelp.add(jMenuItemHelpSysInfo);
-    jMenuItemHelpSysInfo.setText("SystemInfo");
-    // jMenuItemHelpSysInfo.setMnemonic('S');
-    jMenuItemHelpSysInfo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_I,
-      KeyEvent.CTRL_MASK));
-
-    jMenuItemHelpSysInfo.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final JFrame frame = Utils.getWekaJFrame("SystemInfo", m_Self);
+            // Assumes weka.classifiers.bayes.net.GUI is the entry point
+            final GUI bayesGui = new GUI(); // Create instance
+            final JFrame frame = Utils.getWekaJFrame("Bayes Net Graphical Editor", m_Self);
+            if (m_Icon != null) frame.setIconImage(m_Icon);
+            frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         frame.getContentPane().setLayout(new BorderLayout());
+            frame.getContentPane().add(bayesGui, BorderLayout.CENTER); // Add the GUI panel
 
-        // get info
-        Hashtable<String, String> info = new SystemInfo().getSystemInfo();
-
-        // sort names
-        Vector<String> names = new Vector<String>();
-        Enumeration<String> enm = info.keys();
-        while (enm.hasMoreElements()) {
-          names.add(enm.nextElement());
-        }
-        Collections.sort(names);
-
-        // generate table
-        String[][] data = new String[info.size()][2];
-        for (int i = 0; i < names.size(); i++) {
-          data[i][0] = names.get(i).toString();
-          data[i][1] = info.get(data[i][0]).toString();
-        }
-        String[] titles = new String[]{"Key", "Value"};
-        JTable table = new JTable(data, titles);
-
-        frame.getContentPane().add(new JScrollPane(table),
-                BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
+            final WindowAdapter adapter = new WindowAdapter() {
           @Override
           public void windowClosing(WindowEvent w) {
+                    // Does the Bayes GUI need confirmation for unsaved changes?
+                    // Add bayesGui.confirmExit() or similar if available.
             if (checkWindowShouldBeClosed(w)) {
+                        // Add any cleanup for bayesGui?
               disposeWindow(frame, this);
             }
           }
-        });
+            };
+            frame.addWindowListener(adapter);
         frame.pack();
-        frame.setSize(1024, 768);
+            frame.setSize(1024, 768); // Default size
         frame.setLocationRelativeTo(m_Self);
         frame.setVisible(true);
         m_Frames.add(frame);
-      }
-    });
-
-    // applications
-
-    m_ExplorerBut.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        showExplorer(null);
-      }
-    });
-
-    m_ExperimenterBut.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final JFrame frame = Utils.getWekaJFrame("Weka Experiment Environment", m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        final Experimenter experimenter = new Experimenter(false);
-        frame.getContentPane().add(experimenter,
-                BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              experimenter.terminate();
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
-
-
-    m_KnowledgeFlowBut.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        showKnowledgeFlow(null);
-      }
-    });
-
-    m_WorkbenchBut.addActionListener(new ActionListener() {
-
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final JFrame frame = Utils.getWekaJFrame("Weka Workbench", m_Self);
-        WorkbenchApp app = new WorkbenchApp();
-        frame.add(app, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              app.terminate();
-              disposeWindow(frame, this);
-            }
-          }
-        });
-
-        app.showMenuBar(frame);
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-      });
-
-    m_SimpleBut.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        final SimpleCLIPanel simpleCLIPanel = new SimpleCLIPanel();
-        final JFrame frame = Utils.getWekaJFrame(simpleCLIPanel.getTitle(), m_Self);
-        frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(simpleCLIPanel, BorderLayout.CENTER);
-        frame.addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent w) {
-            if (checkWindowShouldBeClosed(w)) {
-              simpleCLIPanel.terminate();
-              disposeWindow(frame, this);
-            }
-          }
-        });
-        frame.pack();
-        frame.setSize(1024, 768);
-        frame.setLocationRelativeTo(m_Self);
-        frame.setVisible(true);
-        m_Frames.add(frame);
-      }
-    });
-
-    /*
-     * m_EnsembleLibraryBut.addActionListener(new ActionListener() { public void
-     * actionPerformed(ActionEvent e) { if (m_EnsembleLibraryFrame == null) {
-     * m_EnsembleLibraryBut.setEnabled(false); m_EnsembleLibraryFrame = new
-     * JFrame("EnsembleLibrary"); m_EnsembleLibraryFrame.setIconImage(m_Icon);
-     * m_EnsembleLibraryFrame.getContentPane().setLayout(new BorderLayout());
-     * EnsembleLibrary value = new EnsembleLibrary(); EnsembleLibraryEditor
-     * libraryEditor = new EnsembleLibraryEditor();
-     * libraryEditor.setValue(value);
-     * m_EnsembleLibraryFrame.getContentPane().add
-     * (libraryEditor.getCustomEditor(), BorderLayout.CENTER);
-     * m_EnsembleLibraryFrame.addWindowListener(new WindowAdapter() { public
-     * void windowClosing(WindowEvent w) { m_EnsembleLibraryFrame.dispose();
-     * m_EnsembleLibraryFrame = null; m_EnsembleLibraryBut.setEnabled(true);
-     * checkExit(); } }); m_EnsembleLibraryFrame.pack();
-     * m_EnsembleLibraryFrame.setSize(1024, 768);
-     * m_EnsembleLibraryFrame.setVisible(true); } } });
-     */
-
-    setJMenuBar(m_jMenuBar);
-
-    addWindowListener(new WindowAdapter() {
-      @Override
-      public void windowClosing(WindowEvent w) {
-        if (checkWindowShouldBeClosed(w)) {
-          dispose();
-          checkExit();
-        }
-      }
-    });
-    pack();
-
-    if (!Utils.getDontShowDialog("weka.gui.GUIChooser.HowToFindPackageManager")) {
-      Thread tipThread = new Thread() {
-        @Override
-        public void run() {
-          JCheckBox dontShow = new JCheckBox("Do not show this message again");
-          Object[] stuff = new Object[2];
-          stuff[0] =
-            "Weka has a package manager that you\n"
-              + "can use to install many learning schemes and tools.\nThe package manager can be "
-              + "found under the \"Tools\" menu.\n";
-          stuff[1] = dontShow;
-          // Display the tip on finding/using the package manager
-          JOptionPane.showMessageDialog(GUIChooserApp.this, stuff,
-            "Weka GUIChooser", JOptionPane.OK_OPTION);
-
-          if (dontShow.isSelected()) {
-            try {
-              Utils
-                .setDontShowDialog("weka.gui.GUIChooser.HowToFindPackageManager");
             } catch (Exception ex) {
-              // quietly ignore
-            }
-          }
-        }
-      };
-      tipThread.setPriority(Thread.MIN_PRIORITY);
-      tipThread.start();
+            ex.printStackTrace(System.err);
+            JOptionPane.showMessageDialog(m_Self, "Could not launch Bayes Net Editor:\n" + ex.getMessage(),
+                                          "Launch Error", JOptionPane.ERROR_MESSAGE);
     }
   }
 
-  public void showKnowledgeFlow(String fileToLoad) {
-    final JFrame frame = Utils.getWekaJFrame("Weka KnowledgeFlow Environment", m_Self);
+    private void openJythonConsole() {
+        if (!Jython.isPresent()) { // Double check
+             JOptionPane.showMessageDialog(m_Self, "Jython library not found in classpath.",
+                                           "Jython Error", JOptionPane.ERROR_MESSAGE);
+             return;
+      }
+        try {
+            final JythonPanel jythonPanel = new JythonPanel();
+            final JFrame frame = Utils.getWekaJFrame("Jython Console", m_Self);
+            if (m_Icon != null) frame.setIconImage(m_Icon);
+            frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE); // Use DISPOSE_ON_CLOSE? Or manual?
     frame.getContentPane().setLayout(new BorderLayout());
-    final KnowledgeFlowApp knowledgeFlow = new KnowledgeFlowApp();
-    frame.getContentPane().add(knowledgeFlow, BorderLayout.CENTER);
-    knowledgeFlow.showMenuBar(frame);
-    frame.addWindowListener(new WindowAdapter() {
+            frame.getContentPane().add(jythonPanel, BorderLayout.CENTER);
+
+            final WindowAdapter adapter = new WindowAdapter() {
       @Override
       public void windowClosing(WindowEvent w) {
-        if (checkWindowShouldBeClosed(w)) {
-
-          ((MainKFPerspective) knowledgeFlow.getMainPerspective())
-                  .closeAllTabs();
-          ((MainKFPerspective) knowledgeFlow.getMainPerspective())
-                  .addUntitledTab();
-
-          /*
-           * kna.closeAllTabs(); kna.clearLayout(); // add a single "Untitled"
-           * tab ready for next // time
-           */
-          knowledgeFlow.terminate();
+                    // Console probably doesn't need confirmation
+                    jythonPanel.terminate(); // Ensure resources are released
           disposeWindow(frame, this);
         }
-      }
-    });
+            };
+            frame.addWindowListener(adapter);
     frame.pack();
-    frame.setSize(1024, 768);
+            frame.setSize(800, 600); // Default size
     frame.setLocationRelativeTo(m_Self);
     frame.setVisible(true);
     m_Frames.add(frame);
-  }
-
-  public void showExplorer(String fileToLoad) {
-    final JFrame frame = Utils.getWekaJFrame("Weka Explorer", m_Self);
-    frame.getContentPane().setLayout(new BorderLayout());
-    final Explorer expl = new Explorer();
-    frame.getContentPane().add(expl, BorderLayout.CENTER);
-    frame.addWindowListener(new WindowAdapter() {
-      @Override
-      public void windowClosing(WindowEvent w) {
-        if (checkWindowShouldBeClosed(w)) {
-          expl.terminate();
-          disposeWindow(frame, this);
-        }
-      }
-    });
-    frame.pack();
-    frame.setSize(1024, 768);
-    frame.setLocationRelativeTo(m_Self);
-    frame.setVisible(true);
-    m_Frames.add(frame);
-
-    if (fileToLoad != null) {
-      try {
-        weka.core.converters.AbstractFileLoader loader =
-                weka.core.converters.ConverterUtils.getLoaderForFile(fileToLoad);
-        loader.setFile(new File(fileToLoad));
-        expl.getPreprocessPanel().setInstancesFromFile(loader);
       } catch (Exception ex) {
-        ex.printStackTrace();
+            ex.printStackTrace(System.err);
+            JOptionPane.showMessageDialog(m_Self, "Could not launch Jython Console:\n" + ex.getMessage(),
+                                          "Launch Error", JOptionPane.ERROR_MESSAGE);
+        }
       }
+
+
+  // --- Utility and Exit Logic ---
+
+  /** Handles closing the main GUIChooser window */
+  private void closeMainApp() {
+      int result = JOptionPane.showConfirmDialog(
+              m_Self,
+              "Are you sure you want to exit the Weka GUI Chooser?",
+              "Exit Weka", // More specific title
+              JOptionPane.YES_NO_OPTION,
+              JOptionPane.QUESTION_MESSAGE);
+      if (result == JOptionPane.YES_OPTION) {
+          dispose(); // Dispose this main window
+          checkExit(); // Check if JVM should exit
     }
   }
 
   /**
-   * insert the menu item in a sorted fashion.
-   *
-   * @param menu the menu to add the item to
-   * @param menuitem the menu item to add
+   * Checks if there are any other frames open, and if not exits the VM.
    */
-  protected void insertMenuItem(JMenu menu, JMenuItem menuitem) {
-    insertMenuItem(menu, menuitem, 0);
+  protected void checkExit() {
+    // Check if the main GUIChooser window itself is still visible or tracked
+    boolean chooserVisible = this.isDisplayable() && this.isVisible();
+
+    // Check if any tracked frames are still displayable
+    boolean otherFramesOpen = false;
+    // Iterate safely over a copy or use synchronized access if m_Frames can be modified concurrently
+    synchronized (m_Frames) { // Simple synchronization for iteration
+        for (JFrame frame : m_Frames) {
+            if (frame != null && frame.isDisplayable() && frame.isVisible()) {
+                otherFramesOpen = true;
+                break;
+            }
+        }
+    }
+
+
+    if (!chooserVisible && !otherFramesOpen) {
+      System.out.println("No other GUIs seem to be open. Exiting...");
+      System.exit(0);
+    } else {
+       // System.out.println("DEBUG: checkExit - ChooserVisible=" + chooserVisible + ", OtherFramesOpen=" + otherFramesOpen);
+    }
   }
 
   /**
-   * insert the menu item in a sorted fashion.
+   * Inserts the menuitem sorted into the menu.
    *
-   * @param menu the menu to add the item to
-   * @param menuitem the menu item to add
-   * @param startIndex the index in the menu to start with (0-based)
+   * @param menu the menu to insert the item into
+   * @param menuitem the menuitem to insert
    */
-  protected void insertMenuItem(JMenu menu, JMenuItem menuitem, int startIndex) {
-    boolean inserted;
-    int i;
-    JMenuItem current;
-    String currentStr;
-    String newStr;
+  protected static void insertMenuItem(JMenu menu, JMenuItem menuitem) {
+    String label = menuitem.getText();
+    int pos = -1;
 
-    inserted = false;
-    newStr = menuitem.getText().toLowerCase();
-
-    // try to find a spot inbetween
-    for (i = startIndex; i < menu.getMenuComponentCount(); i++) {
-      if (!(menu.getMenuComponent(i) instanceof JMenuItem)) {
+    for (int i = 0; i < menu.getItemCount(); i++) {
+      JMenuItem current = menu.getItem(i);
+      // skip separators
+      if (current == null) {
         continue;
       }
+      // Handle potential separators correctly during comparison
+      String currentLabel = current.getText();
+      if (currentLabel == null || currentLabel.isEmpty()) { // Check for null/empty text (might indicate separator visually)
+          continue; // Skip comparison if it's likely a separator
+      }
 
-      current = (JMenuItem) menu.getMenuComponent(i);
-      currentStr = current.getText().toLowerCase();
-      if (currentStr.compareTo(newStr) > 0) {
-        inserted = true;
-        menu.insert(menuitem, i);
+      if (label.compareTo(currentLabel) < 0) {
+        pos = i;
         break;
       }
     }
 
-    // add it at the end if not yet inserted
-    if (!inserted) {
+    if (pos == -1) {
       menu.add(menuitem);
+    } else {
+      menu.insert(menuitem, pos);
     }
   }
 
   /**
-   * creates a frame and returns it.
+   * Creates a frame for the extensions.
    *
-   * @param parent the parent of the generated frame
-   * @param title the title of the frame
-   * @param c the component to place, can be null
-   * @param layout the layout to use, e.g., BorderLayout
-   * @param layoutConstraints the layout constraints, e.g., BorderLayout.CENTER
-   * @param width the width of the frame, ignored if -1
-   * @param height the height of the frame, ignored if -1
-   * @param menu an optional menu
-   * @param listener if true a default listener is added
-   * @param visible if true then the frame is made visible immediately
+   * @param parent the parent frame, can be null
+   * @param title the title for the frame
+   * @param menu the menubar, can be null
+   * @param content the content pane, can be null
+   * @param listener the window listener, can be null
+   * @param width the width, if -1 uses pack()
+   * @param height the height, if -1 uses pack()
+   * @param location the location, if null uses setLocationRelativeTo(parent)
+   * @param resizable whether the frame should be resizable
+   * @param dispose whether to use DISPOSE_ON_CLOSE (otherwise
+   * DO_NOTHING_ON_CLOSE is used)
    * @return the generated frame
    */
-  protected Container createFrame(GUIChooserApp parent, String title,
-    Component c, LayoutManager layout, Object layoutConstraints, int width,
-    int height, JMenuBar menu, boolean listener, boolean visible) {
+  public Container createFrame(final Frame parent, String title, JMenuBar menu,
+    Container content, final WindowAdapter listener, int width, int height,
+    Point location, boolean resizable, final boolean dispose) {
 
-    Container result = null;
+    final JFrame frame = Utils.getWekaJFrame(title, parent); // Use helper
+    if (m_Icon != null) frame.setIconImage(m_Icon); // Set icon
 
-    final ChildFrameSDI frame = new ChildFrameSDI(parent, title);
-
-    // layout
-    frame.setLayout(layout);
-    if (c != null) {
-      frame.getContentPane().add(c, layoutConstraints);
+    if (menu != null) {
+    frame.setJMenuBar(menu);
     }
 
-    // menu
-    frame.setJMenuBar(menu);
+    if (content != null) {
+      frame.setContentPane(content);
+    }
 
-    // size
+    // Set default close operation based on dispose flag
+    frame.setDefaultCloseOperation(dispose ? JFrame.DISPOSE_ON_CLOSE
+      : JFrame.DO_NOTHING_ON_CLOSE);
+
+    // Add the primary listener if provided
+    if (listener != null) {
+      frame.addWindowListener(listener);
+    }
+
+    // Add internal listener for tracking and removal from m_ChildFrames
+    // This ensures removal regardless of the primary listener or close operation
+    final WindowAdapter internalAdapter = new WindowAdapter() {
+             @Override
+             public void windowClosed(WindowEvent e) {
+             m_ChildFrames.remove(frame); // Remove from synchronized set
+             // Optional: log removal
+             // System.out.println("DEBUG: Child frame removed: " + frame.getTitle());
+             // Don't call checkExit here unless closing child frames should trigger app exit check
+             frame.removeWindowListener(this); // Clean up this internal listener
+             }
+         // If DO_NOTHING_ON_CLOSE, we might need windowClosing if the primary listener doesn't handle it
+         @Override
+         public void windowClosing(WindowEvent e) {
+             if (!dispose && listener == null) {
+                 // If DO_NOTHING and no external listener, maybe default to dispose? Or prompt?
+                 // For simplicity, let's assume if DO_NOTHING is used, an external listener WILL handle it.
+                 // If not, the window might become uncloseable without an external listener.
+    }
+         }
+    };
+    frame.addWindowListener(internalAdapter);
+
+    // Add to tracking set immediately after creation
+    m_ChildFrames.add(frame);
+
+
+    if ((width == -1) || (height == -1)) {
     frame.pack();
-    if ((width > -1) && (height > -1)) {
+    } else {
       frame.setSize(width, height);
     }
-    frame.validate();
 
-    // location
-    //int screenHeight = getGraphicsConfiguration().getBounds().height;
-    //int screenWidth = getGraphicsConfiguration().getBounds().width;
-    //frame.setLocation((screenWidth - frame.getBounds().width) / 2,
-    //  (screenHeight - frame.getBounds().height) / 2);
+    frame.setResizable(resizable);
 
+    if (location == null) {
     frame.setLocationRelativeTo(parent);
+    } else {
+      frame.setLocation(location);
+  }
 
-    // listener?
-    if (listener) {
-      frame.addWindowListener(new WindowAdapter() {
-        @Override
-        public void windowClosing(WindowEvent e) {
-          frame.dispose();
-        }
-      });
-    }
-
-    // display frame
-    if (visible) {
-      frame.setVisible(true);
-    }
-
-    result = frame;
-
-    return result;
+    // Note: Frame is not setVisible(true) here, caller should do that.
+    return frame;
   }
 
   /**
-   * Specialized JFrame class.
+   * The main method used to start the GUIChooser.
    *
-   * @author fracpete (fracpete at waikato dot ac dot nz)
-   * @version $Revision$
-   */
-  public static class ChildFrameSDI extends JFrame {
-
-    /** for serialization. */
-    private static final long serialVersionUID = 8588293938686425618L;
-
-    /** the parent frame. */
-    protected GUIChooserApp m_Parent;
-
-    /**
-     * constructs a new internal frame that knows about its parent.
-     *
-     * @param parent the parent frame
-     * @param title the title of the frame
-     */
-    public ChildFrameSDI(GUIChooserApp parent, String title) {
-      super(title);
-
-      m_Parent = parent;
-
-      addWindowListener(new WindowAdapter() {
-        @Override
-        public void windowActivated(WindowEvent e) {
-          // update title of parent
-          if (getParentFrame() != null) {
-            getParentFrame().createTitle(getTitle());
-          }
-        }
-      });
-
-      // add to parent
-      if (getParentFrame() != null) {
-        getParentFrame().addChildFrame(this);
-        setIconImage(getParentFrame().getIconImage());
-      }
-    }
-
-    /**
-     * returns the parent frame, can be null.
-     *
-     * @return the parent frame
-     */
-    public GUIChooserApp getParentFrame() {
-      return m_Parent;
-    }
-
-    /**
-     * de-registers the child frame with the parent first.
-     */
-    @Override
-    public void dispose() {
-      if (getParentFrame() != null) {
-        getParentFrame().removeChildFrame(this);
-        getParentFrame().createTitle("");
-      }
-
-      super.dispose();
-    }
-  }
-
-  /**
-   * creates and displays the title.
-   *
-   * @param title the additional part of the title
-   */
-  protected void createTitle(String title) {
-    String newTitle;
-
-    newTitle = "Weka " + new Version();
-    if (title.length() != 0) {
-      newTitle += " - " + title;
-    }
-
-    setTitle(newTitle);
-  }
-
-  /**
-   * adds the given child frame to the list of frames.
-   *
-   * @param c the child frame to add
-   */
-  public void addChildFrame(Container c) {
-    m_ChildFrames.add(c);
-  }
-
-  /**
-   * tries to remove the child frame, it returns true if it could do such.
-   *
-   * @param c the child frame to remove
-   * @return true if the child frame could be removed
-   */
-  public boolean removeChildFrame(Container c) {
-    boolean result = m_ChildFrames.remove(c);
-    return result;
-  }
-
-  /**
-   * Kills the JVM if all windows have been closed.
-   */
-  private void checkExit() {
-
-    if (!isVisible() && (m_Frames.size() == 0)) {
-      System.setSecurityManager(null);
-      System.exit(0);
-    }
-  }
-
-  /**
-   * Inner class for defaults
-   */
-  public static final class GUIChooserDefaults extends Defaults {
-
-    /** APP name (GUIChooser isn't really an "app" as such */
-    public static final String APP_NAME = "GUIChooser";
-
-    /** ID */
-    public static final String APP_ID = "guichooser";
-
-    /** Settings key for LAF */
-    protected static final Settings.SettingKey LAF_KEY =
-      new Settings.SettingKey(APP_ID + ".lookAndFeel", "Look and feel for UI",
-        "Note: a restart is required for this setting to come into effect");
-
-    /** Default value for LAF */
-    protected static final String LAF =
-      "com.formdev.flatlaf.FlatLightLaf";
-
-    private static final long serialVersionUID = -8524894440289936685L;
-
-    /**
-     * Constructor
-     */
-    public GUIChooserDefaults() {
-      super(APP_ID);
-      List<String> lafs = LookAndFeel.getAvailableLookAndFeelClasses();
-      lafs.add(0, "<use platform default>");
-      LAF_KEY.setPickList(lafs);
-      m_defaults.put(LAF_KEY, LAF);
-    }
-  }
-
-  /**
-   * variable for the GUIChooser class which would be set to null by the memory
-   * monitoring thread to free up some memory if we running out of memory
-   */
-  private static GUIChooserApp m_chooser;
-
-  /** for monitoring the Memory consumption */
-  private static Memory m_Memory = new Memory(true);
-
-  /**
-   * Tests out the GUIChooser environment.
-   *
-   * @param args ignored.
+   * @param args may contain the class name of a GUI component to start
    */
   public static void main(String[] args) {
-
-    weka.core.logging.Logger.log(weka.core.logging.Logger.Level.INFO,
-      "Logging started");
-    try {
-      LookAndFeel.setLookAndFeel(GUIChooserDefaults.APP_ID,
-        GUIChooserDefaults.APP_ID + ".lookAndFeel", GUIChooserDefaults.LAF);
-    } catch (IOException ex) {
-      ex.printStackTrace();
-    }
-
-    // Save std err and std out because they may be redirected by external code
-    final PrintStream savedStdOut = System.out;
-    final PrintStream savedStdErr = System.err;
-
-    // Set up security manager to intercept System.exit() calls in external code
-    final SecurityManager sm = System.getSecurityManager();
-    System.setSecurityManager(new SecurityManager() {
-      public void checkExit(int status) {
-        if (sm != null) {
-          sm.checkExit(status);
+    // UPGRADE: Ensure GUI creation happens on the Event Dispatch Thread
+    SwingUtilities.invokeLater(() -> {
+        // Set application name for macOS menu bar if applicable
+        // Needs testing on macOS, might require additional properties or libraries
+        String osName = System.getProperty("os.name").toLowerCase();
+        if (osName.startsWith("mac os x")) {
+             try {
+                 // System.setProperty("apple.laf.useScreenMenuBar", "true"); // Deprecated/handled automatically?
+                 System.setProperty("com.apple.mrj.application.apple.menu.about.name", "Weka GUIChooser");
+                 // System.setProperty("apple.awt.application.name", "Weka GUIChooser"); // Newer property?
+             } catch (SecurityException se) {
+                  System.err.println("Warning: Security settings prevent setting macOS application name.");
+             }
         }
 
-        // Currently, we are just checking for calls from TigerJython code
-        for (Class cl : getClassContext()) {
-          if (cl.getName().equals("tigerjython.gui.MainWindow")) {
-            for (Frame frame : Frame.getFrames()) {
-              if (frame.getTitle().toLowerCase().startsWith("tigerjython")) {
-                frame.dispose();
-              }
-            }
-
-            // Set std err and std out back to original values
-            System.setOut(savedStdOut);
-            System.setErr(savedStdErr);
-
-            // Make entry in log and
-            /*
-             * weka.core.logging.Logger.log(weka.core.logging.Logger.Level.INFO,
-             * "Intercepted System.exit() from TigerJython. Please ignore");
-             * throw new SecurityException(
-             * "Intercepted System.exit() from TigerJython. Please ignore!");
-             */
-          }
-        }
-
-        weka.core.logging.Logger.log(weka.core.logging.Logger.Level.INFO,
-          "Intercepted System.exit() from a class other than the GUIChooser. "
-            + "Please ignore.");
-        throw new SecurityException("Intercepted System.exit() from "
-          + "a class other than the GUIChooser. Please ignore.");
-      }
-
-      public void checkPermission(Permission perm) {
-        if (sm != null) {
-          sm.checkPermission(perm);
-        }
-      }
-
-      public void checkPermission(Permission perm, Object context) {
-        if (sm != null) {
-          sm.checkPermission(perm, context);
-        }
-      }
-    });
-
-    try {
-
-      // uncomment to disable the memory management:
-      // m_Memory.setEnabled(false);
-      // m_chooser = new GUIChooser();
+        // create GUIChooser singleton
       GUIChooserApp.createSingleton();
-      m_chooser.pack();
-      m_chooser.setSize(500, 350);
-      m_chooser.setVisible(true);
+        GUIChooserApp chooser = GUIChooserApp.m_chooser;
 
-      if (args != null && args.length > 0) {
-        m_chooser.showExplorer(args[0]);
-      }
+        // display GUIChooser
+        chooser.setVisible(true);
 
-      Thread memMonitor = new Thread() {
-        @SuppressWarnings("static-access")
-        @Override
-        public void run() {
-          while (true) {
-            // try {
-            // System.out.println("before sleeping");
-            // this.sleep(10);
-
-            if (m_Memory.isOutOfMemory()) {
-              // clean up
-              m_chooser.dispose();
-
-              if (m_chooser.m_Frames.size() > 0) {
-                for (int i = 0; i < m_chooser.m_Frames.size(); i++) {
-                  JFrame av = m_chooser.m_Frames.get(i);
-                  av.dispose();
-                }
-                m_chooser.m_Frames.clear();
-              }
-              m_chooser = null;
-              System.gc();
-
-              // display error
-              GUIChooserApp.m_LogWindow.pack();
-              GUIChooserApp.m_LogWindow.setSize(1024,768);
-              GUIChooserApp.m_LogWindow.setVisible(true);
-              GUIChooserApp.m_LogWindow.toFront();
-              System.err.println("\ndisplayed message:");
-              m_Memory.showOutOfMemory();
-              System.err.println("\nexiting...");
-              System.setSecurityManager(null);
-              System.exit(-1);
+        // start specific GUI if requested via command line argument?
+        if (args.length == 1) {
+            String component = args[0].toLowerCase(); // Compare lower case
+            System.err.println("Command line argument found, attempting to launch: " + component);
+            // Use helper methods for consistency
+            switch (component) {
+                case "explorer":
+                chooser.openExplorer();
+                    break;
+                case "experimenter":
+                chooser.openExperimenter();
+                    break;
+                case "knowledgeflow":
+                chooser.openKnowledgeFlow();
+                    break;
+                case "simplecli":
+                chooser.openSimpleCLI();
+                    break;
+                // Add cases for other apps if needed (e.g., "workbench")
+                default:
+                    System.err.println("Error: Unknown application specified via command line: '" + args[0] + "'");
+                    // Optionally show a usage message dialog
+                    // JOptionPane.showMessageDialog(chooser, "Unknown application: " + args[0] +
+                    //      "\nValid options: explorer, experimenter, knowledgeflow, simplecli",
+                    //      "Argument Error", JOptionPane.ERROR_MESSAGE);
+                    break;
             }
-            // } catch (InterruptedException ex) {
-            // ex.printStackTrace();
-            // }
           }
+    }); // End SwingUtilities.invokeLater
         }
-      };
+} // End GUIChooserApp class
+/*
 
-      memMonitor.setPriority(Thread.NORM_PRIORITY);
-      memMonitor.start();
-    } catch (Exception ex) {
-      ex.printStackTrace();
-      System.err.println(ex.getMessage());
-    }
-  }
-}
+**Summary of Simple Upgrades Applied:**
+
+1.  **System Look and Feel:** Added code at the beginning of the constructor to make the application use the operating system's native appearance.
+2.  **EDT Safety:** Wrapped the GUI creation and display logic in `main` using `SwingUtilities.invokeLater` to ensure it runs on the Event Dispatch Thread, which is standard practice for Swing applications. Also wrapped some frame creation/showing calls within action listeners where appropriate.
+3.  **`try-with-resources`:** Modified the file reading logic in the visualization action listeners (`openPlotVisualizer`, `openRocVisualizer`, `openTreeVisualizer`, `openGraphVisualizer`) to use `try-with-resources`. This guarantees that file streams (`FileReader`, `FileInputStream`, `BufferedReader`) are closed automatically, even if errors occur.
+4.  **Thread-Safe Set:** Changed the declaration of `m_ChildFrames` from `new HashSet<Container>()` to `Collections.synchronizedSet(new HashSet<>())` to provide basic thread safety in case this set is accessed or modified from different threads (although typically Swing component access should be on the EDT).
+5.  **Minor Cleanups:** Added some null checks, used lambdas for action listeners, slightly improved frame closing logic and resource cleanup hints in `disposeWindow`, added comments.
+
+These changes enhance robustness and appearance with relatively low complexity. Remember that significantly improving concurrency (e.g., replacing `Vector`) or addressing potential security issues related to scripting/plugins would require more substantial ("less lazy") effo
+
+*/

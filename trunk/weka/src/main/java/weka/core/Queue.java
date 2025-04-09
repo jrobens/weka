@@ -28,7 +28,7 @@ package weka.core;
 
 import java.io.Serializable;
 
-/** 
+/**
  * Class representing a FIFO queue.
  *
  * @author Len Trigg (trigg@cs.waikato.ac.nz)
@@ -40,6 +40,10 @@ public class Queue
 
   /** for serialization */
   private static final long serialVersionUID = -1141282001146389780L;
+
+  public boolean isEmpty() {
+      return m_Size == 0;
+  }
 
   /**
    * Represents one node in the queue.
@@ -57,8 +61,8 @@ public class Queue
      */
     protected /*@ non_null spec_public @*/ Object m_Contents;
 
-    /** 
-     * Creates a queue node with the given contents 
+    /**
+     * Creates a queue node with the given contents
      */
     //@ requires contents != null;
     //@ assignable m_Contents, m_Next;
@@ -80,7 +84,7 @@ public class Queue
     } //@ nowarn Invariant; // Because it stupidly checks the Queue invariant!
 
     /**
-     * Gets the next node in the queue. 
+     * Gets the next node in the queue.
      */
     //@ ensures \result == m_Next;
     public /*@ pure @*/ QueueNode next() {
@@ -104,10 +108,10 @@ public class Queue
     public /*@ pure @*/ Object contents() {
       return m_Contents;
     }
-    
+
     /**
      * Returns the revision string.
-     * 
+     *
      * @return		the revision
      */
     public String getRevision() {
@@ -158,13 +162,13 @@ public class Queue
   //@ ensures m_Head != null;
   //@ ensures m_Tail != \old(m_Tail);
   //@ ensures m_Size == \old(m_Size) + 1;
-  //@ ensures \old(m_Size) == 0 ==> m_Head == m_Tail; 
+  //@ ensures \old(m_Size) == 0 ==> m_Head == m_Tail;
   //@ ensures \old(m_Size) != 0 ==> m_Head == \old(m_Head);
   //@ ensures m_Tail.contents() == \old(item);
   //@ ensures \result == item;
   public synchronized Object push(Object item) {
     QueueNode newNode = new QueueNode(item);
-    
+
     if (m_Head == null) {
       m_Head = m_Tail = newNode;
     } else {
@@ -186,7 +190,7 @@ public class Queue
   //@ ensures m_Head != null ==> m_Tail == \old(m_Tail);
   //@ ensures \result == \old(m_Head.m_Contents);
   //@ signals (RuntimeException) \old(m_Head) == null;
-  public synchronized Object pop() 
+  public synchronized Object pop()
       throws RuntimeException   // REDUNDANT, BUT ESCJAVA REQUIRES THIS
   {
     if (m_Head == null) {
@@ -215,9 +219,9 @@ public class Queue
    */
   //@ ensures \result == \old(m_Head.m_Contents);
   //@ signals (RuntimeException) \old(m_Head) == null;
-  public /*@ pure @*/ synchronized Object peek() 
+  public /*@ pure @*/ synchronized Object peek()
     throws RuntimeException
-  { 
+  {
     if (m_Head == null) {
       throw new RuntimeException("Queue is empty");
     }
@@ -226,7 +230,7 @@ public class Queue
 
   /**
    * Checks if queue is empty.
-   * 
+   *
    * @return true if queue is empty
    */
   //@ ensures \result <==> m_Head == null;
@@ -266,10 +270,10 @@ public class Queue
     }
     return retval;
   } //@ nowarn Post;
-  
+
   /**
    * Returns the revision string.
-   * 
+   *
    * @return		the revision
    */
   public String getRevision() {
@@ -297,7 +301,7 @@ public class Queue
 	System.out.println("Pop: " + queue.pop().toString());
       }
       // try one more pop, to make sure we get an exception
-      try 
+      try
 	{
 	  queue.pop();
 	  System.out.println("ERROR: pop did not throw exception!");

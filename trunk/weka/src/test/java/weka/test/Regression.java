@@ -14,7 +14,7 @@
  */
 
 /*
- * Copyright (C) 2002 University of Waikato 
+ * Copyright (C) 2002 University of Waikato
  */
 
 package weka.test;
@@ -32,7 +32,7 @@ import java.util.Properties;
 
 /**
  * <code>Regression</code> provides support for performing regression testing.
- * 
+ *
  * @author <a href="mailto:len@reeltwo.com">Len Trigg</a>
  * @version $Revision$
  */
@@ -62,7 +62,7 @@ public class Regression {
   /**
    * Returns a <code>File</code> corresponding to the root of the reference
    * tree.
-   * 
+   *
    * @return a <code>File</code> giving the root of the reference tree.
    */
   public static File getRoot() {
@@ -81,7 +81,7 @@ public class Regression {
 
   /**
    * Creates a new <code>Regression</code> instance for the supplied class.
-   * 
+   *
    * @param theClass a <code>Class</code> value. The name of the class is used
    *          to determine the reference file to compare output with.
    */
@@ -99,7 +99,7 @@ public class Regression {
   /**
    * Adds some output to the current regression output. The accumulated output
    * will provide the material for the regression comparison.
-   * 
+   *
    * @param output a <code>String</code> that forms part of the regression test.
    */
   public void println(String output) {
@@ -110,7 +110,7 @@ public class Regression {
   /**
    * Returns the difference between the current output and the reference
    * version.
-   * 
+   *
    * @return a <code>String</code> value illustrating the differences. If this
    *         string is empty, there are no differences. If null is returned,
    *         there was no reference output found, and the current output has
@@ -122,7 +122,7 @@ public class Regression {
 
     try {
       String reference = readReference();
-      return diff(reference, m_Output.toString());
+      return diff(reference.strip(), m_Output.toString().strip());
     } catch (FileNotFoundException fnf) {
       // No, write out the current output
       writeAsReference();
@@ -133,7 +133,7 @@ public class Regression {
   /**
    * Returns the difference between two strings, Will be the empty string if
    * there are no difference.
-   * 
+   *
    * @param reference a <code>String</code> value
    * @param current a <code>String</code> value
    * @return a <code>String</code> value describing the differences between the
@@ -158,7 +158,7 @@ public class Regression {
 
   /**
    * Reads the reference output from a file and returns it as a String
-   * 
+   *
    * @return a <code>String</code> value containing the reference output
    * @exception IOException if an error occurs.
    */
@@ -179,7 +179,7 @@ public class Regression {
    * called automatically if diff() is called with no existing reference
    * version. You may wish to call it explicitly if you know you want to create
    * the reference version.
-   * 
+   *
    * @exception IOException if an error occurs.
    */
   public void writeAsReference() throws IOException {
@@ -195,7 +195,7 @@ public class Regression {
 
   /**
    * Tests Regression from the command line
-   * 
+   *
    * @param args a <code>String</code> array containing values to send to
    *          println().
    */

@@ -32,7 +32,7 @@ import weka.core.Instances;
 /**
  * Abstract class gives default implementation of setSource methods. All other
  * methods must be overridden.
- * 
+ *
  * @author Richard Kirkby (rkirkby@cs.waikato.ac.nz)
  * @version $Revision$
  */
@@ -45,7 +45,7 @@ public abstract class AbstractLoader implements Loader {
 
   /**
    * Sets the retrieval mode.
-   * 
+   *
    * @param mode the retrieval mode
    */
   @Override
@@ -56,7 +56,7 @@ public abstract class AbstractLoader implements Loader {
 
   /**
    * Gets the retrieval mode.
-   * 
+   *
    * @return the retrieval mode
    */
   protected int getRetrieval() {
@@ -66,7 +66,7 @@ public abstract class AbstractLoader implements Loader {
 
   /**
    * Default implementation throws an IOException.
-   * 
+   *
    * @param file the File
    * @exception IOException always
    */
@@ -78,8 +78,7 @@ public abstract class AbstractLoader implements Loader {
 
   /**
    * Default implementation sets retrieval mode to NONE
-   * 
-   * @exception never.
+   *
    */
   @Override
   public void reset() throws Exception {
@@ -88,7 +87,7 @@ public abstract class AbstractLoader implements Loader {
 
   /**
    * Default implementation throws an IOException.
-   * 
+   *
    * @param input the input stream
    * @exception IOException always
    */

@@ -131,7 +131,7 @@ Integration with CPython for Weka. Python version 2.7.x or higher is required. A
       <artifactId>commons-io</artifactId>
       <version>1.3.2</version>
     </dependency>
-    
+
     <dependency>
       <groupId>nz.ac.waikato.cms.weka</groupId>
       <artifactId>weka-dev</artifactId>
@@ -223,8 +223,8 @@ Integration with CPython for Weka. Python version 2.7.x or higher is required. A
           <artifactId>maven-compiler-plugin</artifactId>
           <version>2.0.2</version>
           <configuration>
-            <source>1.8</source>
-            <target>1.8</target>
+            <source>21</source>
+            <target>21</target>
           </configuration>
         </plugin>
 
@@ -253,7 +253,7 @@ Integration with CPython for Weka. Python version 2.7.x or higher is required. A
             <useReleaseProfile>false</useReleaseProfile>
             <!-- tests are performed with the ant build file, hence skipped here. -->
             <preparationGoals>clean verify -P no-tests</preparationGoals>
-            <goals>deploy -P no-tests</goals> 
+            <goals>deploy -P no-tests</goals>
           </configuration>
         </plugin>
       </plugins>

@@ -14,7 +14,7 @@
  */
 
 /*
- * Copyright (C) 2002-2006 University of Waikato 
+ * Copyright (C) 2002-2006 University of Waikato
  */
 
 package weka.classifiers;
@@ -36,11 +36,11 @@ import weka.test.Regression;
  * Abstract Test class for Classifiers. Internally it uses the class
  * <code>CheckClassifier</code> to determine success or failure of the tests. It
  * follows basically the <code>testsPerClassType</code> method.
- * 
+ *
  * @author <a href="mailto:len@reeltwo.com">Len Trigg</a>
  * @author FracPete (fracpete at waikato dot ac dot nz)
  * @version $Revision$
- * 
+ *
  * @see CheckClassifier
  * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
  * @see PostProcessor
@@ -63,7 +63,7 @@ public abstract class AbstractClassifierTest extends TestCase {
     /**
      * Provides a hook for derived classes to further modify the data.
      * Currently, the data is just passed through.
-     * 
+     *
      * @param data the data to process
      * @return the processed data
      */
@@ -109,7 +109,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * the number of classes to test with testNClasses()
-   * 
+   *
    * @see #testNClasses()
    */
   protected int m_NClasses;
@@ -176,7 +176,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * Constructs the <code>AbstractClassifierTest</code>. Called by subclasses.
-   * 
+   *
    * @param name the name of the test class
    */
   public AbstractClassifierTest(String name) {
@@ -186,7 +186,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * returns a custom PostProcessor for the CheckClassifier datasets, currently
    * only null.
-   * 
+   *
    * @return a custom PostProcessor, if necessary
    * @see PostProcessor
    */
@@ -196,7 +196,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * configures the CheckClassifier instance used throughout the tests
-   * 
+   *
    * @return the fully configured CheckClassifier instance used for testing
    */
   protected CheckClassifier getTester() {
@@ -215,7 +215,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * Configures the CheckOptionHandler uses for testing the optionhandling. Sets
    * the classifier return from the getClassifier() method.
-   * 
+   *
    * @return the fully configured CheckOptionHandler
    * @see #getClassifier()
    */
@@ -233,7 +233,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * Configures the CheckGOE used for testing GOE stuff. Sets the Classifier
    * returned from the getClassifier() method.
-   * 
+   *
    * @return the fully configured CheckGOE
    * @see #getClassifier()
    */
@@ -250,7 +250,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * Called by JUnit before each test method. This implementation creates the
    * default classifier to test and loads a test set of Instances.
-   * 
+   *
    * @exception Exception if an error occurs reading the example instances.
    */
   @SuppressWarnings("unchecked")
@@ -322,7 +322,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * Used to create an instance of a specific classifier.
-   * 
+   *
    * @return a suitably configured <code>Classifier</code> value
    */
   public abstract Classifier getClassifier();
@@ -330,7 +330,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * checks whether at least one attribute type can be handled with the given
    * class type
-   * 
+   *
    * @param type the class type to check for
    * @return true if at least one attribute type can be predicted with the given
    *         class
@@ -343,7 +343,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * returns a string for the class type
-   * 
+   *
    * @param type the class type
    * @return the class type as string
    */
@@ -354,7 +354,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * tests whether the classifier can handle certain attributes and if not, if
    * the exception is OK
-   * 
+   *
    * @param nom to check for nominal attributes
    * @param num to check for numeric attributes
    * @param str to check for string attributes
@@ -437,7 +437,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * tests whether the classifier can handle different types of attributes and
    * if not, if the exception is OK
-   * 
+   *
    * @see #checkAttributes(boolean, boolean, boolean, boolean, boolean, boolean,
    *      boolean)
    */
@@ -458,7 +458,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether the classifier handles instance weights correctly
-   * 
+   *
    * @see CheckClassifier#instanceWeights(boolean, boolean, boolean, boolean,
    *      boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -488,7 +488,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether classifier handles data containing only a class attribute
-   * 
+   *
    * @see CheckClassifier#canHandleOnlyClass(boolean, boolean, boolean, boolean,
    *      boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -515,7 +515,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether classifier handles N classes
-   * 
+   *
    * @see CheckClassifier#canHandleNClasses(boolean, boolean, boolean, boolean,
    *      boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -543,7 +543,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * checks whether the classifier can handle the class attribute at a given
    * position (0-based index, -1 means last).
-   * 
+   *
    * @param type the class type
    * @param position the position of the class attribute (0-based, -1 means
    *          last)
@@ -576,7 +576,7 @@ public abstract class AbstractClassifierTest extends TestCase {
    * Tests whether the classifier can handle class attributes as Nth attribute.
    * In case of multi-instance classifiers it performs no tests, since the
    * multi-instance data has a fixed format (bagID,bag,class).
-   * 
+   *
    * @see CheckClassifier#canHandleClassAsNthAttribute(boolean, boolean,
    *      boolean, boolean, boolean, boolean, int, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -605,7 +605,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether the classifier can handle zero training instances
-   * 
+   *
    * @see CheckClassifier#canHandleZeroTraining(boolean, boolean, boolean,
    *      boolean, boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -634,7 +634,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * checks whether the classifier can handle the given percentage of missing
    * predictors
-   * 
+   *
    * @param type the class type
    * @param percent the percentage of missing predictors
    * @param allowFail if true a fail statement may be executed
@@ -661,7 +661,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether the classifier can handle missing predictors (20% and 100%)
-   * 
+   *
    * @see CheckClassifier#canHandleMissing(boolean, boolean, boolean, boolean,
    *      boolean, boolean, int, boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -688,7 +688,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * checks whether the classifier can handle the given percentage of missing
    * class labels
-   * 
+   *
    * @param type the class type
    * @param percent the percentage of missing class labels
    * @param allowFail if true a fail statement may be executed
@@ -714,7 +714,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether the classifier can handle missing class values (20% and 100%)
-   * 
+   *
    * @see CheckClassifier#canHandleMissing(boolean, boolean, boolean, boolean,
    *      boolean, boolean, int, boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -741,7 +741,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * tests whether the classifier correctly initializes in the buildClassifier
    * method
-   * 
+   *
    * @see CheckClassifier#correctBuildInitialisation(boolean, boolean, boolean,
    *      boolean, boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -769,7 +769,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * tests whether the classifier alters the training set during training.
-   * 
+   *
    * @see CheckClassifier#datasetIntegrity(boolean, boolean, boolean, boolean,
    *      boolean, boolean, int, boolean, boolean)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -799,7 +799,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * tests whether the classifier erroneously uses the class value of test
    * instances (if provided)
-   * 
+   *
    * @see CheckClassifier#doesntUseTestClassVal(boolean, boolean, boolean,
    *      boolean, boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -827,7 +827,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * tests whether the classifier produces the same model when trained
    * incrementally as when batch trained.
-   * 
+   *
    * @see CheckClassifier#updatingEquality(boolean, boolean, boolean, boolean,
    *      boolean, boolean, int)
    * @see CheckClassifier#testsPerClassType(int, boolean, boolean, boolean)
@@ -860,7 +860,7 @@ public abstract class AbstractClassifierTest extends TestCase {
    * Builds a model using the current classifier using the first half of the
    * current data for training, and generates a bunch of predictions using the
    * remaining half of the data for testing.
-   * 
+   *
    * @param data the instances to test the classifier on
    * @return a <code>FastVector</code> containing the predictions.
    */
@@ -903,7 +903,7 @@ public abstract class AbstractClassifierTest extends TestCase {
 
   /**
    * Returns a string containing all the predictions.
-   * 
+   *
    * @param predictions a <code>FastVector</code> containing the predictions
    * @return a <code>String</code> representing the vector of predictions.
    */
@@ -919,7 +919,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * Provides a hook for derived classes to further modify the data. Currently,
    * the data is just passed through.
-   * 
+   *
    * @param data the data to process
    * @return the processed data
    */
@@ -983,7 +983,7 @@ public abstract class AbstractClassifierTest extends TestCase {
       String diff = reg.diff();
       if (diff == null) {
         System.err.println("Warning: No reference available, creating.");
-      } else if (!diff.equals("")) {
+      } else if (!diff.isEmpty()) {
         fail("Regression test failed. Difference:\n" + diff);
       }
     } catch (java.io.IOException ex) {
@@ -1030,7 +1030,7 @@ public abstract class AbstractClassifierTest extends TestCase {
   /**
    * tests the whether the user-supplied options stay the same after setting.
    * getting, and re-setting again.
-   * 
+   *
    * @see #getOptionTester()
    */
   public void testCanonicalUserOptions() {

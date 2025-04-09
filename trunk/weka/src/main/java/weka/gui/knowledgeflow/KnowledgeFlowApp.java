@@ -61,6 +61,7 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
    * variable for the KnowledgeFlowApp class which would be set to null by the
    * memory monitoring thread to free up some memory if we running out of memory
    */
+  // Made static in original - consider if instance specific state is better
   protected static KnowledgeFlowApp m_kfApp;
 
   /** Settings for the Knowledge Flow */
@@ -68,6 +69,11 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
 
   /** Main perspective of the Knowledge Flow */
   protected MainKFPerspective m_mainPerspective;
+
+  // --- NEW: Instance variable to hold the containing frame ---
+  /** The main JFrame containing this application panel */
+  private JFrame m_frame;
+  // --- END NEW ---
 
   /**
    * Constructor
@@ -78,7 +84,7 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
 
   /**
    * Constructor
-   * 
+   *
    * @param layoutComponent true if the Knowledge Flow should layout the
    *          application using the default layout - i.e. the perspectives
    *          toolbar at the north of a {@code BorderLayout} and the
@@ -99,6 +105,31 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
       showPerspectivesToolBar();
     }
   }
+
+  // --- NEW: Method to set the containing frame ---
+  /**
+   * Sets the main JFrame that contains this KnowledgeFlowApp panel.
+   * Typically called from the main method after frame creation.
+   * @param frame the containing JFrame.
+   */
+  public void setFrame(JFrame frame) {
+      this.m_frame = frame;
+      // Potentially update other components that might need the frame reference
+  }
+  // --- END NEW ---
+
+
+  // --- UPDATED: Getter for the containing frame ---
+  /**
+   * Gets the main JFrame containing this application panel.
+   * Returns null if setFrame() has not been called.
+   * @return the containing JFrame, or null.
+   */
+  public JFrame getFrame() {
+    return m_frame;
+  }
+  // --- END UPDATE ---
+
 
   /**
    * Get the name of this application
@@ -171,7 +202,9 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
           kfDefaults.add(envDefaults);
         }
       } catch (Exception ex) {
-        ex.printStackTrace();
+        // Log this error properly
+        System.err.println("Error getting defaults for execution environment '" + envName + "': " + ex.getMessage());
+        ex.printStackTrace(System.err);
       }
 
       m_kfProperties.applyDefaults(kfDefaults);
@@ -194,13 +227,22 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
    */
   @Override
   public void settingsChanged() {
-    boolean showTipText =
-      getApplicationSettings().getSetting(KFDefaults.APP_ID,
-        KFDefaults.SHOW_JTREE_TIP_TEXT_KEY,
-        KFDefaults.SHOW_JTREE_GLOBAL_INFO_TIPS, Environment.getSystemWide());
-    GenericObjectEditor.setShowGlobalInfoToolTips(showTipText);
+      boolean showTipText =
+              getApplicationSettings().getSetting(KFDefaults.APP_ID,
+                      KFDefaults.SHOW_JTREE_TIP_TEXT_KEY,
+                      KFDefaults.SHOW_JTREE_GLOBAL_INFO_TIPS, Environment.getSystemWide());
+      GenericObjectEditor.setShowGlobalInfoToolTips(showTipText);
 
-    m_mainPerspective.m_stepTree.setShowLeafTipText(showTipText);
+      // Ensure main perspective exists before accessing its components
+      if (m_mainPerspective != null && m_mainPerspective.m_stepTree != null) {
+          m_mainPerspective.m_stepTree.setShowLeafTipText(showTipText);
+      } else if (getMainPerspective() instanceof MainKFPerspective) {
+          // If called before mainPerspective is fully initialized but getMainPerspective works
+          MainKFPerspective mainP = (MainKFPerspective) getMainPerspective();
+          if (mainP.m_stepTree != null) {
+              mainP.m_stepTree.setShowLeafTipText(showTipText);
+          }
+      }
   }
 
   /**
@@ -260,10 +302,13 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
       LookAndFeel.setLookAndFeel(KFDefaults.APP_ID, KFDefaults.APP_ID
         + ".lookAndFeel", KFDefaults.LAF);
     } catch (IOException ex) {
-      ex.printStackTrace();
+      System.err.println("Warning: Could not set LookAndFeel.");
+      ex.printStackTrace(System.err);
     }
     weka.gui.GenericObjectEditor.determineClasses();
 
+    // Run GUI creation on the EDT
+    SwingUtilities.invokeLater(() -> {
     try {
       if (System.getProperty("os.name").contains("Mac")) {
         Settings forLookAndFeelOnly = new Settings("weka", KFDefaults.APP_ID);
@@ -276,73 +321,104 @@ public class KnowledgeFlowApp extends AbstractGUIApplication {
         if (laf != null && laf.length() > 0
           && (laf.contains("Aqua") || laf.contains("platform default"))) {
           System.setProperty("apple.laf.useScreenMenuBar", "true");
+                  // Set application name for Mac menu bar
+                   System.setProperty("com.apple.mrj.application.apple.menu.about.name", "Weka KnowledgeFlow");
+                   // System.setProperty("apple.awt.application.name", "Weka KnowledgeFlow"); // Newer property?
         }
       }
+
+            // Create the application panel instance
       m_kfApp = new KnowledgeFlowApp();
 
-      if (args.length == 1) {
-        File toLoad = new File(args[0]);
-        if (toLoad.exists() && toLoad.isFile()) {
-          ((MainKFPerspective) m_kfApp.getMainPerspective()).loadLayout(toLoad,
-            false);
-        }
-      }
-      final javax.swing.JFrame jf =
+            // Create the main frame
+            // Use local variable 'jf' here, then pass it to the instance
+            final JFrame jf =
         new javax.swing.JFrame("Weka " + m_kfApp.getApplicationName());
+
+            // --- NEW: Link the frame to the application instance ---
+            m_kfApp.setFrame(jf);
+            // --- END NEW ---
+
+            // Setup the frame
       jf.getContentPane().setLayout(new java.awt.BorderLayout());
 
       Image icon =
         Toolkit.getDefaultToolkit().getImage(
           KnowledgeFlowApp.class.getClassLoader().getResource(
             "weka/gui/weka_icon_new_48.png"));
+            if (icon != null) { // Check if icon loaded
       jf.setIconImage(icon);
+            }
+            jf.getContentPane().add(m_kfApp, BorderLayout.CENTER); // Add the app panel to the frame
+            jf.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Exit JVM when frame closes
+            jf.pack(); // Pack before setting size/visibility
 
-      jf.getContentPane().add(m_kfApp, BorderLayout.CENTER);
-
-      jf.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-      jf.pack();
+            // Add menu bar from the application panel to the frame
       m_kfApp.showMenuBar(jf);
-      jf.setSize(1023, 768);
-      jf.setVisible(true);
-      // weird effect where, if there are more perspectives than would fit
-      // in one row horizontally in the perspective manager, then the WrapLayout
-      // does not wrap when the Frame is first pack()ed. No amount of
-      // invalidating/revalidating/repainting components
-      // and ancestors seems to make a difference. Resizing - even by one pixel
-      // -
-      // however, does force it to re-layout and wrap. Perhaps this is an OSX
-      // bug...
-      jf.setSize(1024, 768);
 
-      Thread memMonitor = new Thread() {
-        @Override
-        public void run() {
+            jf.setSize(1024, 768); // Set desired size
+            jf.setLocationRelativeTo(null); // Center on screen
+            jf.setVisible(true); // Show the frame
+
+            // Handle command line argument to load a file (after frame is visible)
+            if (args.length == 1) {
+                File toLoad = new File(args[0]);
+                if (toLoad.exists() && toLoad.isFile()) {
+                    // Ensure main perspective is initialized before loading
+                    if (m_kfApp.getMainPerspective() instanceof MainKFPerspective) {
+                        ((MainKFPerspective) m_kfApp.getMainPerspective()).loadLayout(toLoad, false);
+                    } else {
+                         System.err.println("Error: Main perspective not available for loading file.");
+                    }
+                } else {
+                    System.err.println("Warning: File specified on command line not found: " + args[0]);
+                }
+            }
+
+            // Start memory monitor thread
+            Thread memMonitor = new Thread(() -> { // Use Lambda
           while (true) {
-            // try {
-            // System.out.println("Before sleeping.");
-            // Thread.sleep(10);
+                    try {
+                        Thread.sleep(5000); // Check memory less frequently (e.g., every 5 seconds)
+                    } catch (InterruptedException e) {
+                         Thread.currentThread().interrupt(); // Restore interrupt status
+                         break; // Exit loop if interrupted
+                    }
 
             if (m_Memory.isOutOfMemory()) {
-              // clean up
+                        System.err.println("\nCRITICAL: Out of memory detected!");
+                        // Clean up - ensure frame disposal happens on EDT
+                        SwingUtilities.invokeLater(() -> {
+                            if (jf != null) {
               jf.dispose();
-              m_kfApp = null;
-              System.gc();
+                            }
+                        });
+                        m_kfApp = null; // Nullify static reference
+                        System.gc(); // Suggest GC
 
-              // display error
-              System.err.println("\ndisplayed message:");
-              m_Memory.showOutOfMemory();
-              System.err.println("\nexiting");
-              System.exit(-1);
+                        // Display error message (can block if EDT is stuck, consider separate error window)
+                        System.err.println("Displaying OutOfMemory message...");
+                        m_Memory.showOutOfMemory(); // This might pop up a dialog
+                        System.err.println("Exiting due to OutOfMemoryError.");
+                        System.exit(-1); // Force exit
             }
           }
-        }
-      };
+            }); // End Lambda
 
-      memMonitor.setPriority(Thread.MAX_PRIORITY);
+            memMonitor.setName("KnowledgeFlow-MemoryMonitor");
+            memMonitor.setPriority(Thread.MAX_PRIORITY); // High priority to catch OOM
+            memMonitor.setDaemon(true); // Make it a daemon thread so it doesn't prevent exit
       memMonitor.start();
+
     } catch (Exception ex) {
-      ex.printStackTrace();
-    }
+            System.err.println("Fatal error starting KnowledgeFlowApp: " + ex.getMessage());
+            ex.printStackTrace(System.err);
+            // Optionally show an error dialog to the user
+            JOptionPane.showMessageDialog(null,
+                "Fatal error starting KnowledgeFlow:\n" + ex.getMessage(),
+                "Startup Error", JOptionPane.ERROR_MESSAGE);
+            System.exit(1); // Exit on fatal startup error
   }
-}
+    }); // End SwingUtilities.invokeLater
+  } // End main
+} // End class
